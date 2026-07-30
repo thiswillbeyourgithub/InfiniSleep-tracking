@@ -30,6 +30,7 @@ NimbleController::NimbleController(Pinetime::System::SystemTask& systemTask,
                                    Pinetime::Drivers::SpiNorFlash& spiNorFlash,
                                    HeartRateController& heartRateController,
                                    MotionController& motionController,
+                                   ActivityLogProvider& activityLogProvider,
                                    FS& fs)
   : systemTask {systemTask},
     bleController {bleController},
@@ -48,6 +49,7 @@ NimbleController::NimbleController(Pinetime::System::SystemTask& systemTask,
     immediateAlertService {systemTask, notificationManager},
     heartRateService {*this, heartRateController},
     motionService {*this, motionController},
+    activityLogService {*this, activityLogProvider},
     fsService {systemTask, fs},
     serviceDiscovery({&currentTimeClient, &alertNotificationClient}) {
 }
@@ -97,6 +99,7 @@ void NimbleController::Init() {
   immediateAlertService.Init();
   heartRateService.Init();
   motionService.Init();
+  activityLogService.Init();
   fsService.Init();
 
   int rc;
@@ -325,12 +328,15 @@ int NimbleController::OnGAPEvent(ble_gap_event* event) {
       if (event->subscribe.reason == BLE_GAP_SUBSCRIBE_REASON_TERM) {
         heartRateService.UnsubscribeNotification(event->subscribe.attr_handle);
         motionService.UnsubscribeNotification(event->subscribe.attr_handle);
+        activityLogService.UnsubscribeNotification(event->subscribe.attr_handle);
       } else if (event->subscribe.prev_notify == 0 && event->subscribe.cur_notify == 1) {
         heartRateService.SubscribeNotification(event->subscribe.attr_handle);
         motionService.SubscribeNotification(event->subscribe.attr_handle);
+        activityLogService.SubscribeNotification(event->subscribe.attr_handle);
       } else if (event->subscribe.prev_notify == 1 && event->subscribe.cur_notify == 0) {
         heartRateService.UnsubscribeNotification(event->subscribe.attr_handle);
         motionService.UnsubscribeNotification(event->subscribe.attr_handle);
+        activityLogService.UnsubscribeNotification(event->subscribe.attr_handle);
       }
       break;
 

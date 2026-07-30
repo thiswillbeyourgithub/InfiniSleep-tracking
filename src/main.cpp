@@ -36,6 +36,7 @@
 #include "components/datetime/DateTimeController.h"
 #include "components/heartrate/HeartRateController.h"
 #include "components/fs/FS.h"
+#include "components/activity/ActivityLogController.h"
 #include "drivers/Spi.h"
 #include "drivers/SpiMaster.h"
 #include "drivers/SpiNorFlash.h"
@@ -111,6 +112,7 @@ Pinetime::Controllers::ButtonHandler buttonHandler;
 Pinetime::Controllers::BrightnessController brightnessController {};
 
 Pinetime::Controllers::InfiniSleepController infiniSleepController {dateTimeController, fs, heartRateController, brightnessController};
+Pinetime::Controllers::ActivityLogController activityLogController {fs};
 
 
 Pinetime::Applications::DisplayApp displayApp(lcd,
@@ -151,7 +153,8 @@ Pinetime::System::SystemTask systemTask(spi,
                                         fs,
                                         touchHandler,
                                         buttonHandler,
-                                        infiniSleepController);
+                                        infiniSleepController,
+                                        activityLogController);
 int mallocFailedCount = 0;
 int stackOverflowCount = 0;
 extern "C" {
