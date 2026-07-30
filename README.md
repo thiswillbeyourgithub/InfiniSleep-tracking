@@ -1,111 +1,92 @@
-<div align="center">
+# InfiniSleep tracking
 
-![Header Image](doc/logo/watchface_collage.png)
+A personal fork of [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime), the open source firmware for the [PineTime](https://pine64.org/devices/pinetime/), with one goal: make the watch record sleep on its own and hand the recording to a companion app afterwards.
 
-<br>
+The work lives on the `infinisleep-health` branch. The other half is [Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), the companion app that collects what this firmware records. Neither half is useful without the other.
 
-[![GitHub tag](https://img.shields.io/github/tag/InfiniTimeOrg/InfiniTime?include_prereleases=&sort=semver&color=blue)](https://github.com/InfiniTimeOrg/InfiniTime/releases)
-[![GitHub License](https://img.shields.io/github/license/InfiniTimeOrg/InfiniTime)](https://github.com/InfiniTimeOrg/InfiniLink/blob/main/LICENSE)
-[![Issues - InfiniTime](https://img.shields.io/github/issues/InfiniTimeOrg/InfiniTime)](https://github.com/InfiniTimeOrg/InfiniTime/issues)
-[![Pull Requests - InfiniTime](https://img.shields.io/github/issues-pr/InfiniTimeOrg/InfiniTime)](https://github.com/InfiniTimeOrg/InfiniTime/pulls)
-[![Downloads - InfiniTime](https://img.shields.io/github/downloads/InfiniTimeOrg/InfiniTime/total)](https://github.com/InfiniTimeOrg/InfiniTime)
-[![Stars - InfiniTime](https://img.shields.io/github/stars/InfiniTimeOrg/InfiniTime?style=social)](https://github.com/InfiniTimeOrg/InfiniTime/stargazers)
-[![Forks - InfiniTime](https://img.shields.io/github/forks/InfiniTimeOrg/InfiniTime?style=social)](https://github.com/InfiniTimeOrg/InfiniTime/network/members)
+## Why
 
-# InfiniTime
+A stock PineTime can only report what it measures at the moment something is listening. Sleep happens exactly when the phone is least likely to be connected, so sleep charts stay empty no matter what the watch measured. This fork gives the watch a small log of its own and a way to hand it over later.
 
-*Fast open-source firmware for the [PineTime smartwatch](https://pine64.org/devices/pinetime/) with many features, written in modern C++.*
+It builds on two upstream efforts, neither of which is merged:
 
-<br>
+- [PR 2174, InfiniSleep: SleepTk Port](https://github.com/InfiniTimeOrg/InfiniTime/pull/2174) by cyberneel, which this fork is based on. It adds the Sleep app, the sleep cycle goal and the gradual wake alarm.
+- [PR 2304, Add Sleeptracking](https://github.com/InfiniTimeOrg/InfiniTime/pull/2304) by sillydan1, a smaller independent take on the same problem, which logs to a file on the watch.
 
-</div>
+## What this fork adds
 
-## New to InfiniTime?
+- A heart rate reading taken at each tracker epoch, rather than a setting that promised one and did nothing.
+- An actigraphy count accumulated from the accelerometer.
+- A ring of 341 records (timestamp, motion, heart rate, kind), stored packed at 6 bytes each and mirrored to `/.system/activity.dat` so it survives a reboot. About three and a half nights at a 5 minute epoch.
+- A BLE service, `00060000-78fc-48fe-8e23-433b3a1942d0`, that hands the records over in batches and only reclaims the space once the host says it stored them.
+- Both sampling rates as settings, on a new Sensors page in the Sleep app.
+- A backoff below 25 percent battery: the epoch floors at 30 minutes and the accelerometer poll at 1 second, so the tracker does not flatten the battery before morning, and the log is written to flash on the way past that threshold so a battery that dies at 4am does not take the night with it.
 
-- [Getting started with InfiniTime](doc/gettingStarted/gettingStarted-1.0.md)
-- [Updating the software](doc/gettingStarted/updating-software.md)
-- [About the firmware and bootloader](doc/gettingStarted/about-software.md)
-- [Available apps](doc/gettingStarted/Applications.md)
-- [Available watch faces](/doc/gettingStarted/Watchfaces.md)
-- [PineTimeStyle Watch face](https://pine64.org/documentation/PineTime/Watchfaces/PineTimeStyle)
-  - [Weather integration](https://pine64.org/documentation/PineTime/Software/InfiniTime_weather/)
+The BLE service is deliberately kept independent of how sleep is tracked, so it could be reviewed on its own.
 
-### Companion apps
+## Motion tracking is untested, because this watch's accelerometer is broken
 
-- [Gadgetbridge](https://gadgetbridge.org/) (Android)
-- [Amazfish](https://github.com/piggz/harbour-amazfish/) ([SailfishOS](https://sailfishos-chum.github.io/apps/harbour-amazfish/), [Ubuntu Touch](https://open-store.io/app/uk.co.piggz.amazfish), [Flatpak](https://flathub.org/apps/uk.co.piggz.amazfish))
-- [Siglo](https://github.com/alexr4535/siglo) (Linux)
-- [InfiniLink](https://github.com/InfiniTimeOrg/InfiniLink) (iOS)
-- [ITD](https://gitea.elara.ws/Elara6331/itd) (Linux)
-- [WatchMate](https://github.com/azymohliad/watchmate) (Linux)
-- [InfiniTimeExplorer](https://infinitimeexplorer.netlify.app) (Web)
+The BMA accelerometer in the unit this was written on never answers on I2C. It reads back a chip id of `0x00`, the About screen shows `Accel. ??? 00/2`, and the same bus reads the touch panel's ids correctly, so the bus is fine and the chip is not. Draining the battery flat did not clear it either, which rules out a latched state.
 
-<br>
+The motion code is written and shipped anyway, for watches whose sensor works, but it is **off by default** and has to be turned on from the Sensors page in the Sleep app. Until then, records report `0xFFFF`, meaning not measured. The firmware also refuses to wake the accelerometer overnight when no sensor answered at boot, so turning the setting on costs nothing on a watch like this one.
 
-> *InfiniTimeExplorer is only compatible with web browsers that support Web BLE. Current fully supported browsers include Chrome and Microsoft Edge.* 
->
-> *We removed mentions to NRFConnect as this app is closed source and recent versions do not work anymore with InfiniTime (the last version known to work is 4.24.3). If you used NRFConnect in the past, we recommend you switch to [Gadgetbridge](https://gadgetbridge.org/).* 
+**Anyone reading this should treat the motion side as unverified on hardware.** Heart rate, the log, the BLE transfer and the settings do work.
 
-## Development
+## Companion app
 
-- [InfiniTime Vision](doc/InfiniTimeVision.md)
-- [Rough structure of the code](doc/code/Intro.md)
-- [How to implement an application](doc/code/Apps.md)
-- [Generate the fonts and symbols](src/displayapp/fonts/README.md)
-- [Tips on designing an app UI](doc/ui_guidelines.md)
-- [Bootloader, OTA and DFU](bootloader/README.md)
-- [External resources](doc/ExternalResources.md)
+[Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), branch `infinisleep`, is the companion app for this firmware. Stock Gadgetbridge does not know about this service and will simply ignore it, so the log stays on the watch until it is overwritten.
 
-### Contributing
+There is no need to uninstall the Gadgetbridge you already have. The fork builds under its own application id, so the two sit side by side on the phone and keep separate databases:
 
-- [How to contribute](CONTRIBUTING.md)
-- [Coding conventions](doc/coding-convention.md)
+```bash
+./gradlew assembleMainlineNopebble
+adb install -r app/build/outputs/apk/mainline/nopebble/*.apk
+```
 
-### Build, flash and debug
+## Building
 
-- [InfiniTime simulator](https://github.com/InfiniTimeOrg/InfiniSim)
-- [Build the project](doc/buildAndProgram.md)
-- [Build the project with Docker](doc/buildWithDocker.md)
-- [Build the project with VSCode](doc/buildWithVScode.md)
-- [Flash the firmware using OpenOCD and STLinkV2](doc/openOCD.md)
-- [Flash the firmware using SWD interface](doc/SWD.md)
-- [Flash the firmware using JLink](doc/jlink.md)
-- [Flash the firmware using GDB](doc/gdb.md)
-- [Stub using NRF52-DK](doc/PinetimeStubWithNrf52DK.md)
+Unchanged from upstream, so the docker route from [doc/buildWithDocker.md](doc/buildWithDocker.md) works as it does there:
 
-### API
+```bash
+git submodule update --init
+docker build -t infinitime-build ./docker            # once, and it takes a while
+docker run --rm -it -v ${PWD}:/sources --user $(id -u):$(id -g) infinitime-build
+```
 
-- [BLE implementation and API](doc/ble.md)
+The flashable file lands in `build/output/pinetime-mcuboot-app-dfu-<version>.zip`. Send it over BLE with the `dfu.py` from this repository, not the one from wasp-os, which fails with a UUID error:
 
-### Architecture and technical topics
+```bash
+python dfu.py -z build/output/pinetime-mcuboot-app-dfu-<version>.zip -a <MAC> --legacy
+```
 
-- [Memory analysis](doc/MemoryAnalysis.md)
+Gadgetbridge can install the same zip from its firmware update screen.
 
-### Project management
+One warning specific to this tree: an incremental build can miss a header change and silently link object files that disagree about the layout of a class, which corrupts RAM at runtime rather than failing to build. Delete `build/` when a header changed.
 
-- [Maintainer's guide](doc/maintainer-guide.md)
-- [Versioning](doc/versioning.md)
-- [Project branches](doc/branches.md)
-- [Files included in the release notes](doc/filesInReleaseNotes.md)
-- [Files needed by the factory](doc/files-needed-by-factory.md)
+```bash
+tests/activity/run.sh          # activity log tests, on the host: no hardware, no docker
+```
+
+## Commits in this fork
+
+Oldest first, as conventional commits. The history was squashed into one commit per subject, so bug fixes are folded into whatever introduced them.
+
+- cfc4ec5f feat(motion): report why the accelerometer failed to initialise, on the About screen
+- 0f0ad621 feat(activity): keep a log of recorded activity and serve it over BLE, with host tests
+- 2dcd595e feat(infinisleep): write one activity record per tracker epoch, with heart rate, motion and a low battery backoff
+- 8418c4ff feat(infinisleep): rework the sleep pages and add a Sensors page
+- 971d979b chore: drop four games for flash, and ignore the local build helpers
+
+Plus the commit that wrote this README, which cannot list its own hash.
+
+## Upstream
+
+Everything else, including getting started, the app and watch face lists, the code walkthrough and the flashing guides, is unchanged and documented in the [upstream README](https://github.com/InfiniTimeOrg/InfiniTime#readme) and under [doc/](doc/).
 
 ## Licenses
 
-This project is released under the GNU General Public License version 3 or, at your option, any later version.
+Unchanged from upstream: GNU General Public License version 3 or, at your option, any later version. It integrates [FreeRTOS](https://freertos.org) (MIT), [LVGL](https://lvgl.io/) (MIT), [NimBLE](https://github.com/apache/mynewt-nimble) (Apache 2.0) and [Jetbrains Mono](https://www.jetbrains.com/lp/mono/) (Apache 2.0). Credit for InfiniTime itself belongs upstream.
 
-It integrates the following projects:
+---
 
-- RTOS: **[FreeRTOS](https://freertos.org)** under the MIT license
-- UI: **[LittleVGL/LVGL](https://lvgl.io/)** under the MIT license
-- BLE stack: **[NimBLE](https://github.com/apache/mynewt-nimble)** under the Apache 2.0 license
-- Font: **[Jetbrains Mono](https://www.jetbrains.com/fr-fr/lp/mono/)** under the Apache 2.0 license
-
-## Credits
-
-I’m not working alone on this project. First, many people create pull requests for this project. Then, there is the whole #pinetime community: a lot of people all around the world who are hacking, searching, experimenting and programming the Pinetime. We exchange our ideas, experiments and code in the chat rooms and forums.
-
-Here are some people I would like to highlight:
-
-- [Atc1441](https://github.com/atc1441/): He works on an Arduino based firmware for the Pinetime and many other smartwatches based on similar hardware. He was of great help when I was implementing support for the BMA421 motion sensor and I²C driver.
-- [Koen](https://github.com/bosmoment): He’s working on a firmware based on RiotOS. He integrated similar libs as me: NimBLE, LittleVGL,… His help was invaluable too!
-- [Lup Yuen Lee](https://github.com/lupyuen): He is everywhere: he works on a Rust firmware, builds a MCUBoot based bootloader for the Pinetime, designs a Flutter based companion app for smartphones and writes a lot of articles about the Pinetime!
+The work in this fork was done with [Claude Code](https://claude.com/claude-code).
