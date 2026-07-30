@@ -55,3 +55,13 @@ src/arm-none-eabi
 node_modules
 package.json
 package-lock.json
+
+# Local build helper and notes, not part of upstream
+/build_oli.sh
+/build_oli.log
+/build_gb.sh
+/build_gb.log
+/CLAUDE.local.md
+# Working notes for the sleep tracking effort. Kept on disk rather than in the history:
+# it is a scratchpad that is rewritten constantly, not documentation anyone else should read.
+/PLAN.md
