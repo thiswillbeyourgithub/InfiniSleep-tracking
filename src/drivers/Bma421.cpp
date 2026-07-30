@@ -32,6 +32,18 @@ namespace {
     [BMA4_ACCEL_RANGE_8G] = 256,  // LSB/g +/- 8g range
     [BMA4_ACCEL_RANGE_16G] = 128  // LSB/g +/- 16g range
   };
+
+  // The datasheet asks for a few milliseconds after the 0xB6 soft reset before the chip id
+  // register reads back reliably. One millisecond was not always enough.
+  constexpr uint32_t softResetDelayMs = 5;
+
+  // Reading the chip id straight after the soft reset, with the TWI peripheral having just been
+  // disabled and re-enabled, can return a corrupted byte: watches in this state report 0x01
+  // rather than the 0x11 of a BMA421. bma4_init() already throws away one read for the same
+  // reason when running over SPI, but does nothing equivalent for I2C, so retry here instead of
+  // condemning a working sensor on the strength of a single bad transaction.
+  constexpr uint8_t maxInitAttempts = 5;
+  constexpr uint32_t initRetryDelayMs = 5;
 }
 
 Bma421::Bma421(TwiMaster& twiMaster, uint8_t twiAddress) : twiMaster {twiMaster}, deviceAddress {twiAddress} {
@@ -45,12 +57,34 @@ Bma421::Bma421(TwiMaster& twiMaster, uint8_t twiAddress) : twiMaster {twiMaster}
 }
 
 void Bma421::Init() {
-  if (not isResetOk)
+  if (not isResetOk) {
+    diagnostics.status = InitStatus::NotReset;
     return; // Call SoftReset (and reset TWI device) first!
+  }
 
-  auto ret = bma423_init(&bma);
-  if (ret != BMA4_OK)
+  // Probe first: a sensor that never acknowledges its address is a different problem from one
+  // that answers with a chip id nobody recognises, and the chip id read alone cannot tell them
+  // apart. The alternate address covers a board that pulled SDO high.
+  diagnostics.addressAcked = twiMaster.Probe(deviceAddress);
+  diagnostics.altAddressAcked = twiMaster.Probe(deviceAddress + 1);
+
+  int8_t ret = BMA4_E_INVALID_SENSOR;
+  for (uint8_t attempt = 1; attempt <= maxInitAttempts; attempt++) {
+    diagnostics.attempts = attempt;
+    ret = bma423_init(&bma);
+    if (ret == BMA4_OK) {
+      break;
+    }
+    nrf_delay_ms(initRetryDelayMs);
+  }
+
+  // Keep the chip id even when the driver rejected it: it is the only clue that tells an
+  // unsupported sensor apart from nothing answering on the bus at all.
+  diagnostics.chipId = bma.chip_id;
+  if (ret != BMA4_OK) {
+    diagnostics.status = InitStatus::DriverInit;
     return;
+  }
 
   switch (bma.chip_id) {
     case BMA423_CHIP_ID:
@@ -65,33 +99,46 @@ void Bma421::Init() {
   }
 
   ret = bma423_write_config_file(&bma);
-  if (ret != BMA4_OK)
+  if (ret != BMA4_OK) {
+    diagnostics.status = InitStatus::ConfigFile;
     return;
+  }
 
   ret = bma4_set_interrupt_mode(BMA4_LATCH_MODE, &bma);
-  if (ret != BMA4_OK)
+  if (ret != BMA4_OK) {
+    diagnostics.status = InitStatus::InterruptMode;
     return;
+  }
 
   ret = bma423_feature_enable(BMA423_STEP_CNTR, 1, &bma);
-  if (ret != BMA4_OK)
+  if (ret != BMA4_OK) {
+    diagnostics.status = InitStatus::FeatureEnable;
     return;
+  }
 
   ret = bma423_step_detector_enable(0, &bma);
-  if (ret != BMA4_OK)
+  if (ret != BMA4_OK) {
+    diagnostics.status = InitStatus::StepDetector;
     return;
+  }
 
   ret = bma4_set_accel_enable(1, &bma);
-  if (ret != BMA4_OK)
+  if (ret != BMA4_OK) {
+    diagnostics.status = InitStatus::AccelEnable;
     return;
+  }
 
   accel_conf.odr = BMA4_OUTPUT_DATA_RATE_100HZ;
   accel_conf.range = BMA4_ACCEL_RANGE_2G;
   accel_conf.bandwidth = BMA4_ACCEL_NORMAL_AVG4;
   accel_conf.perf_mode = BMA4_CIC_AVG_MODE;
   ret = bma4_set_accel_config(&accel_conf, &bma);
-  if (ret != BMA4_OK)
+  if (ret != BMA4_OK) {
+    diagnostics.status = InitStatus::AccelConfig;
     return;
+  }
 
+  diagnostics.status = InitStatus::Ok;
   isOk = true;
 }
 
@@ -142,10 +189,14 @@ void Bma421::SoftReset() {
   auto ret = bma4_soft_reset(&bma);
   if (ret == BMA4_OK) {
     isResetOk = true;
-    nrf_delay_ms(1);
+    nrf_delay_ms(softResetDelayMs);
   }
 }
 
 Bma421::DeviceTypes Bma421::DeviceType() const {
   return deviceType;
+}
+
+const Bma421::Diagnostics& Bma421::GetDiagnostics() const {
+  return diagnostics;
 }

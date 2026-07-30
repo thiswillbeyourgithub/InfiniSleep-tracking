@@ -1,5 +1,7 @@
 #include <FreeRTOS.h>
 #include <algorithm>
+#include <cstddef>
+#include <cstdio>
 #include <task.h>
 #include "displayapp/screens/SystemInfo.h"
 #include <lvgl/lvgl.h>
@@ -28,6 +30,36 @@ namespace {
         return "???";
     }
     return "???";
+  }
+
+  // A sensor that failed to start reports zeros forever, which looks exactly like a watch that
+  // is never moved. Append the chip id the driver read back and the step of Init() that gave up,
+  // so the two can be told apart without a debugger. A sensor that only answered after a retry
+  // is flagged too, since that is a bus problem waiting to come back. Healthy watches that
+  // started on the first attempt show only the device name.
+  void FormatAccelerometer(char* buffer, size_t size, const Pinetime::Controllers::MotionController& motionController) {
+    const char* name = ToString(motionController.DeviceType());
+    const auto& diagnostics = motionController.GetDiagnostics();
+
+    if (motionController.DeviceType() == Pinetime::Controllers::MotionController::DeviceTypes::Unknown) {
+      // Trailing pair is which addresses acknowledged on the bus, primary then alternate.
+      snprintf(buffer,
+               size,
+               "%s %02x/%d %c%c",
+               name,
+               diagnostics.chipId,
+               static_cast<int>(diagnostics.status),
+               diagnostics.addressAcked ? 'A' : '.',
+               diagnostics.altAddressAcked ? 'B' : '.');
+      return;
+    }
+
+    if (diagnostics.attempts > 1) {
+      snprintf(buffer, size, "%s r%d", name, diagnostics.attempts);
+      return;
+    }
+
+    snprintf(buffer, size, "%s", name);
   }
 }
 
@@ -143,6 +175,9 @@ std::unique_ptr<Screen> SystemInfo::CreateScreen2() {
   #define TARGET_DEVICE_NAME "UNKNOWN"
 #endif
 
+  char accelerometer[16];
+  FormatAccelerometer(accelerometer, sizeof(accelerometer), motionController);
+
   lv_obj_t* label = lv_label_create(lv_scr_act(), nullptr);
   lv_label_set_recolor(label, true);
   lv_label_set_text_fmt(label,
@@ -169,7 +204,7 @@ std::unique_ptr<Screen> SystemInfo::CreateScreen2() {
                         batteryController.Voltage(),
                         brightnessController.ToString(),
                         resetReason,
-                        ToString(motionController.DeviceType()),
+                        accelerometer,
                         touchPanel.GetChipId(),
                         touchPanel.GetVendorId(),
                         touchPanel.GetFwVersion(),

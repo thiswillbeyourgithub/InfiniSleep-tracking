@@ -155,6 +155,61 @@ TwiMaster::ErrorCodes TwiMaster::Write(uint8_t deviceAddress, const uint8_t* dat
   return ErrorCodes::NoError;
 }
 
+bool TwiMaster::Probe(uint8_t deviceAddress) {
+  xSemaphoreTake(mutex, portMAX_DELAY);
+  Wakeup();
+
+  // Clear any sticky state so ERRORSRC describes only this transaction.
+  twiBaseAddress->ERRORSRC = twiBaseAddress->ERRORSRC;
+  twiBaseAddress->EVENTS_ERROR = 0x0UL;
+  twiBaseAddress->EVENTS_LASTTX = 0x0UL;
+  twiBaseAddress->EVENTS_TXSTARTED = 0x0UL;
+  twiBaseAddress->EVENTS_STOPPED = 0x0UL;
+
+  // Send a single byte, the register pointer, and see whether the address is acknowledged.
+  // Setting a register pointer without following up is harmless on every device on this bus.
+  internalBuffer[0] = 0;
+  twiBaseAddress->ADDRESS = deviceAddress;
+  twiBaseAddress->TASKS_RESUME = 0x1UL;
+  twiBaseAddress->TXD.PTR = reinterpret_cast<uint32_t>(internalBuffer);
+  twiBaseAddress->TXD.MAXCNT = 1;
+  twiBaseAddress->TASKS_STARTTX = 1;
+
+  bool timedOut = false;
+
+  txStartedCycleCount = DWT->CYCCNT;
+  while (!twiBaseAddress->EVENTS_LASTTX && !twiBaseAddress->EVENTS_ERROR) {
+    if ((DWT->CYCCNT - txStartedCycleCount) > HwFreezedDelay) {
+      timedOut = true;
+      break;
+    }
+  }
+  twiBaseAddress->EVENTS_LASTTX = 0x0UL;
+
+  twiBaseAddress->TASKS_STOP = 0x1UL;
+  txStartedCycleCount = DWT->CYCCNT;
+  while (!twiBaseAddress->EVENTS_STOPPED) {
+    if ((DWT->CYCCNT - txStartedCycleCount) > HwFreezedDelay) {
+      timedOut = true;
+      break;
+    }
+  }
+  twiBaseAddress->EVENTS_STOPPED = 0x0UL;
+
+  const uint32_t errorSrc = twiBaseAddress->ERRORSRC;
+  twiBaseAddress->ERRORSRC = errorSrc;
+  twiBaseAddress->EVENTS_ERROR = 0x0UL;
+
+  if (timedOut) {
+    FixHwFreezed();
+  }
+
+  Sleep();
+  xSemaphoreGive(mutex);
+
+  return !timedOut && (errorSrc & TWIM_ERRORSRC_ANACK_Msk) == 0;
+}
+
 void TwiMaster::Sleep() {
   twiBaseAddress->ENABLE = (TWIM_ENABLE_ENABLE_Disabled << TWIM_ENABLE_ENABLE_Pos);
 }

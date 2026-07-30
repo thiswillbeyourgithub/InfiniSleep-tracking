@@ -16,6 +16,14 @@ namespace Pinetime {
       ErrorCodes Read(uint8_t deviceAddress, uint8_t registerAddress, uint8_t* buffer, size_t size);
       ErrorCodes Write(uint8_t deviceAddress, uint8_t registerAddress, const uint8_t* data, size_t size);
 
+      /// Returns true if a device acknowledged its address on the bus.
+      ///
+      /// Read() and Write() deliberately report success even when the peripheral flags an error,
+      /// and Cst816S and Hrs3300 both rely on that behaviour, so this is kept separate rather
+      /// than changing what they see. It exists so an absent device can be told apart from one
+      /// that answers with nonsense, which is otherwise indistinguishable.
+      bool Probe(uint8_t deviceAddress);
+
       void Sleep();
       void Wakeup();
 
