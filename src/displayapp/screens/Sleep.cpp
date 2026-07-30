@@ -567,17 +567,12 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
                    alarmHour,
                    alarmMinute);
 
-      infiniSleepController.SetWakeAlarmTime(alarmHour, alarmMinute);
-
       hourCounter.SetValue(alarmHour);
       minuteCounter.SetValue(alarmMinute);
 
+      // Exactly what turning the counters by hand does, and nothing more: the button fills the
+      // wake up time in, it does not decide that the alarm is on and that the night has started.
       OnValueChanged();
-      infiniSleepController.ScheduleWakeAlarm();
-      SetSwitchState(LV_ANIM_OFF);
-      // Setting the suggested time enables the alarm, so go on to the tracking page as well
-      displayState = SleepDisplayState::Info;
-      UpdateDisplay();
       return;
     }
     if (obj == btnWakeMode) {
