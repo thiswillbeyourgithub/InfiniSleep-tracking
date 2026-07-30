@@ -76,8 +76,10 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 2dcd595e feat(infinisleep): write one activity record per tracker epoch, with heart rate, motion and a low battery backoff
 - 8418c4ff feat(infinisleep): rework the sleep pages and add a Sensors page
 - 971d979b chore: drop four games for flash, and ignore the local build helpers
+- e31ae1b4 feat(infinisleep): put the sensor settings on top of the sleep pages
+- 3a7fd504 fix(infinisleep): make the Auto button set the wake up time and nothing else
 
-Plus the commit that wrote this README, which cannot list its own hash.
+Plus the commits that write this list, which cannot list their own hash.
 
 ## Upstream
 
