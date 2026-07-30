@@ -31,9 +31,12 @@ namespace Pinetime {
         void StopAlerting(bool setSwitch = true);
         void SnoozeWakeAlarm();
         void UpdateDisplay();
-        enum class SleepDisplayState { Info, Alarm, Settings };
-        SleepDisplayState displayState = SleepDisplayState::Info;
-        SleepDisplayState lastDisplayState = SleepDisplayState::Info;
+        // Pages from top to bottom: swiping down goes to the settings, swiping up to the info page.
+        // Alarm (the wake up time setter) is the page the app starts on.
+        enum class SleepDisplayState { Settings, Sensors, Alarm, Info };
+        static constexpr SleepDisplayState firstPage = SleepDisplayState::Settings;
+        static constexpr SleepDisplayState lastPage = SleepDisplayState::Info;
+        SleepDisplayState displayState = SleepDisplayState::Alarm;
 
         Controllers::InfiniSleepController& infiniSleepController;
 
@@ -69,9 +72,20 @@ namespace Pinetime {
         void DrawAlarmScreen();
         void DrawInfoScreen();
         void DrawSettingsScreen();
+        /// What is recorded overnight and how often, as opposed to how the alarm behaves.
+        void DrawSensorsScreen();
+        /// One "Name  [value]" row of a settings page. Returns the button, whose only child is
+        /// the value label, so that OnButtonEvent can update it through lv_obj_get_child.
+        lv_obj_t* CreateSettingRow(const char* name, int16_t yOffset);
         bool StopAlarmPush();
+        // Counts the pushes needed to stop the alarm or the tracker, returns true once there are enough of them
+        bool StopPushConfirmed();
 
         bool alreadyAlerting = false;
+        // The page currently on screen, so that the alarm page isn't redrawn under the fingers
+        // of the user while the time is being set
+        bool screenDrawn = false;
+        SleepDisplayState drawnState = SleepDisplayState::Alarm;
 
         lv_obj_t* label_hr;
         lv_obj_t* label_start_time;
@@ -81,12 +95,14 @@ namespace Pinetime {
         lv_obj_t* label_sleep_cycles;
         lv_obj_t *btnSuggestedAlarm, *txtSuggestedAlarm, *iconSuggestedAlarm;
 
-        lv_obj_t *lblWakeMode, *btnWakeMode, *lblWakeModeValue, *lblCycles, *btnCycles, *lblCycleValue, *btnTestMotorGradual,
-          *lblMotorStrength, *btnMotorStrength, *lblMotorStrengthValue, *lblPushesToStop, *btnPushesToStop, *lblPushesToStopValue;
+        lv_obj_t *btnWakeMode, *btnCycles, *btnTestMotorGradual, *lblMotorStrength, *btnMotorStrength, *btnPushesToStop;
 
-        Widgets::PageIndicator pageIndicator1 = Widgets::PageIndicator(0, 3);
-        Widgets::PageIndicator pageIndicator2 = Widgets::PageIndicator(1, 3);
-        Widgets::PageIndicator pageIndicator3 = Widgets::PageIndicator(2, 3);
+        lv_obj_t *btnHeartRateTracking, *btnBodyTracking, *btnTrackerInterval, *btnMotionInterval;
+
+        Widgets::PageIndicator pageIndicatorSettings = Widgets::PageIndicator(0, 4);
+        Widgets::PageIndicator pageIndicatorSensors = Widgets::PageIndicator(1, 4);
+        Widgets::PageIndicator pageIndicatorAlarm = Widgets::PageIndicator(2, 4);
+        Widgets::PageIndicator pageIndicatorInfo = Widgets::PageIndicator(3, 4);
       };
     }
 

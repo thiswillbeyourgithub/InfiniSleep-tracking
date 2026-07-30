@@ -9,6 +9,7 @@
 
 #include <libraries/log/nrf_log.h>
 #include <lvgl/lvgl.h>
+#include <cstddef>
 
 using namespace Pinetime::Applications::Screens;
 
@@ -31,6 +32,36 @@ namespace {
     screen->ignoreButtonPush = false;
   }
 
+  const char* WakeModeName(const Pinetime::Controllers::InfiniSleepController::InfiniSleepSettings& settings) {
+    if (settings.graddualWake && settings.naturalWake) {
+      return "Both";
+    }
+    if (settings.graddualWake) {
+      return "Pre.";
+    }
+    if (settings.naturalWake) {
+      return "Nat.";
+    }
+    return "Norm.";
+  }
+
+  // The values the sensor page cycles through, rather than stepping one by one through a
+  // range nobody wants to tap sixty times.
+  constexpr uint8_t trackerIntervalChoices[] = {1, 2, 5, 10, 15, 20, 30, 45, 60};
+  constexpr uint8_t motionIntervalChoices[] = {1, 2, 5, 10, 20, 50};
+
+  // Next entry after current, wrapping. A value that is in no list, which is what a settings
+  // file written by another version can hold, snaps to the first entry.
+  template <size_t N>
+  uint8_t NextChoice(uint8_t current, const uint8_t (&choices)[N]) {
+    for (size_t i = 0; i < N; i++) {
+      if (choices[i] == current) {
+        return choices[(i + 1) % N];
+      }
+    }
+    return choices[0];
+  }
+
   void PressesToStopAlarmTimeoutCallback(lv_task_t* task) {
     auto* screen = static_cast<Sleep*>(task->user_data);
     screen->infiniSleepController.pushesLeftToStopWakeAlarm = screen->infiniSleepController.infiniSleepSettings.pushesToStopAlarm;
@@ -49,14 +80,24 @@ Sleep::Sleep(Controllers::InfiniSleepController& infiniSleepController,
     clockType {clockType},
     displayApp {displayApp} {
 
-  infiniSleepController.infiniSleepSettings.heartRateTracking = false;
+  // heartRateTracking used to be forced off here, from when nothing measured the heart rate
+  // overnight and the setting only promised something the firmware did not do. It is a real
+  // setting now, so it is left to whatever the user chose.
+  infiniSleepController.infiniSleepSettings.sleepCycleDuration = 90;
   infiniSleepController.SetSettingsChanged();
-  UpdateDisplay();
+
+  // Created before the first draw, UpdateDisplay resets the refresh task
   taskRefresh = lv_task_create(RefreshTaskCallback, 2000, LV_TASK_PRIO_MID, this);
   taskPressesToStopAlarmTimeout =
     lv_task_create(PressesToStopAlarmTimeoutCallback, PUSHES_TO_STOP_ALARM_TIMEOUT * 1000, LV_TASK_PRIO_MID, this);
-  infiniSleepController.infiniSleepSettings.sleepCycleDuration = 90;
-  infiniSleepController.SetSettingsChanged();
+
+  // The tracking page is the only page reachable while the tracker runs, so that is where
+  // the app has to open when it is reopened during the night
+  if (infiniSleepController.IsTrackerEnabled()) {
+    displayState = SleepDisplayState::Info;
+  }
+
+  UpdateDisplay();
 
   if (!infiniSleepController.IsEnabled()) {
     infiniSleepController.prevBrightnessLevel = infiniSleepController.GetBrightnessController().Level();
@@ -93,11 +134,19 @@ void Sleep::Refresh() {
 }
 
 void Sleep::UpdateDisplay() {
-  if (infiniSleepController.IsAlerting() != true && lastDisplayState == displayState && displayState == SleepDisplayState::Alarm) {
+  // The alarm page holds the time counters, redrawing it on every refresh would fight with the user
+  if (screenDrawn && infiniSleepController.IsAlerting() != true && displayState == SleepDisplayState::Alarm &&
+      drawnState == SleepDisplayState::Alarm) {
     return;
   }
 
   lv_task_reset(taskRefresh);
+
+  // These point into the page about to be freed, and OnButtonEvent identifies which setting was
+  // tapped by comparing against them. Left dangling, one could compare equal to a button freshly
+  // allocated at the same address on the next page, which is enough to change the wrong setting.
+  btnWakeMode = btnCycles = btnTestMotorGradual = btnMotorStrength = btnPushesToStop = nullptr;
+  btnHeartRateTracking = btnBodyTracking = btnTrackerInterval = btnMotionInterval = nullptr;
 
   // Clear the screen
   lv_obj_clean(lv_scr_act());
@@ -108,17 +157,23 @@ void Sleep::UpdateDisplay() {
   switch (displayState) {
     case SleepDisplayState::Alarm:
       DrawAlarmScreen();
-      pageIndicator2.Create();
+      pageIndicatorAlarm.Create();
       break;
     case SleepDisplayState::Info:
       DrawInfoScreen();
-      pageIndicator1.Create();
+      pageIndicatorInfo.Create();
       break;
     case SleepDisplayState::Settings:
       DrawSettingsScreen();
-      pageIndicator3.Create();
+      pageIndicatorSettings.Create();
+      break;
+    case SleepDisplayState::Sensors:
+      DrawSensorsScreen();
+      pageIndicatorSensors.Create();
       break;
   }
+  drawnState = displayState;
+  screenDrawn = true;
 
   if (alreadyAlerting) {
     RedrawSetAlerting();
@@ -338,19 +393,40 @@ void Sleep::DrawInfoScreen() {
   // Start/Stop button
   trackerToggleBtn = lv_btn_create(lv_scr_act(), nullptr);
   trackerToggleBtn->user_data = this;
-  lv_obj_set_height(trackerToggleBtn, 50);
+  // Same size as the stop button of the ringing alarm, which holds the same "Stop: x/y" text
+  lv_obj_set_size(trackerToggleBtn, 130, 50);
   lv_obj_align(trackerToggleBtn, nullptr, LV_ALIGN_IN_BOTTOM_MID, 0, 0);
 
   // Tracker toggle button
   trackerToggleLabel = lv_label_create(trackerToggleBtn, nullptr);
   if (infiniSleepController.IsTrackerEnabled()) {
-    lv_label_set_text_static(trackerToggleLabel, "Stop");
+    // Stopping the tracker takes as many pushes as stopping the ringing alarm does
+    lv_label_set_text_fmt(trackerToggleLabel,
+                          "Stop: %d/%d",
+                          infiniSleepController.infiniSleepSettings.pushesToStopAlarm - infiniSleepController.pushesLeftToStopWakeAlarm,
+                          infiniSleepController.infiniSleepSettings.pushesToStopAlarm);
     lv_obj_set_style_local_bg_color(trackerToggleBtn, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, LV_COLOR_RED);
   } else {
     lv_label_set_text_static(trackerToggleLabel, "Start");
     lv_obj_set_style_local_bg_color(trackerToggleBtn, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, LV_COLOR_GREEN);
   }
   lv_obj_set_event_cb(trackerToggleBtn, btnEventHandler);
+}
+
+lv_obj_t* Sleep::CreateSettingRow(const char* name, int16_t yOffset) {
+  lv_obj_t* label = lv_label_create(lv_scr_act(), nullptr);
+  lv_label_set_text_static(label, name);
+  lv_obj_align(label, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, yOffset);
+
+  lv_obj_t* button = lv_btn_create(lv_scr_act(), nullptr);
+  lv_obj_set_size(button, 100, 50);
+  lv_obj_align(button, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 130, yOffset);
+  button->user_data = this;
+  lv_obj_set_event_cb(button, btnEventHandler);
+
+  lv_obj_t* value = lv_label_create(button, nullptr);
+  lv_obj_align(value, nullptr, LV_ALIGN_CENTER, 0, 0);
+  return button;
 }
 
 void Sleep::DrawSettingsScreen() {
@@ -366,41 +442,15 @@ void Sleep::DrawSettingsScreen() {
     return;
   }
 
-  uint8_t y_offset = 10;
+  int16_t y_offset = 10;
 
-  lblWakeMode = lv_label_create(lv_scr_act(), nullptr);
-  lv_label_set_text_static(lblWakeMode, "Wake\nMode");
-  lv_obj_align(lblWakeMode, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, y_offset);
-
-  btnWakeMode = lv_btn_create(lv_scr_act(), nullptr);
-  lv_obj_set_size(btnWakeMode, 100, 50);
-  lv_obj_align(btnWakeMode, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 130, y_offset);
-  btnWakeMode->user_data = this;
-  lv_obj_set_event_cb(btnWakeMode, btnEventHandler);
-  const char* mode = (infiniSleepController.infiniSleepSettings.graddualWake && infiniSleepController.infiniSleepSettings.naturalWake)
-                       ? "Both"
-                     : infiniSleepController.infiniSleepSettings.graddualWake ? "Pre."
-                     : infiniSleepController.infiniSleepSettings.naturalWake  ? "Nat."
-                                                                              : "Norm.";
-  lblWakeModeValue = lv_label_create(btnWakeMode, nullptr);
-  lv_label_set_text_static(lblWakeModeValue, mode);
-  lv_obj_align(lblWakeModeValue, nullptr, LV_ALIGN_CENTER, 0, 0);
+  btnWakeMode = CreateSettingRow("Wake\nMode", y_offset);
+  lv_label_set_text_static(lv_obj_get_child(btnWakeMode, nullptr), WakeModeName(infiniSleepController.infiniSleepSettings));
 
   y_offset += 60; // Adjust the offset for the next UI element
 
-  lblCycles = lv_label_create(lv_scr_act(), nullptr);
-  lv_label_set_text_static(lblCycles, "Desired\nCycles");
-  lv_obj_align(lblCycles, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, y_offset);
-
-  btnCycles = lv_btn_create(lv_scr_act(), nullptr);
-  lv_obj_set_size(btnCycles, 100, 50);
-  lv_obj_align(btnCycles, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 130, y_offset);
-  btnCycles->user_data = this;
-  lv_obj_set_event_cb(btnCycles, btnEventHandler);
-
-  lblCycleValue = lv_label_create(btnCycles, nullptr);
-  lv_label_set_text_fmt(lblCycleValue, "%d", infiniSleepController.infiniSleepSettings.desiredCycles);
-  lv_obj_align(lblCycleValue, nullptr, LV_ALIGN_CENTER, 0, 0);
+  btnCycles = CreateSettingRow("Desired\nCycles", y_offset);
+  lv_label_set_text_fmt(lv_obj_get_child(btnCycles, nullptr), "%d", infiniSleepController.infiniSleepSettings.desiredCycles);
 
   infiniSleepController.infiniSleepSettings.sleepCycleDuration = 90;
   infiniSleepController.SetSettingsChanged();
@@ -417,32 +467,48 @@ void Sleep::DrawSettingsScreen() {
   lv_label_set_text_static(lblMotorStrength, "Motor\nPower");
   lv_obj_align(lblMotorStrength, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 0, 0);
 
+  // The label of this row lives inside its own button, which buzzes the motor to preview the
+  // strength, so it does not go through CreateSettingRow
   btnMotorStrength = lv_btn_create(lv_scr_act(), nullptr);
   lv_obj_set_size(btnMotorStrength, 100, 50);
   lv_obj_align(btnMotorStrength, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 130, y_offset);
   btnMotorStrength->user_data = this;
   lv_obj_set_event_cb(btnMotorStrength, btnEventHandler);
 
-  lblMotorStrengthValue = lv_label_create(btnMotorStrength, nullptr);
+  lv_obj_t* lblMotorStrengthValue = lv_label_create(btnMotorStrength, nullptr);
   lv_label_set_text_fmt(lblMotorStrengthValue, "%d", infiniSleepController.infiniSleepSettings.motorStrength);
   motorController.infiniSleepMotorStrength = infiniSleepController.infiniSleepSettings.motorStrength;
   lv_obj_align(lblMotorStrengthValue, nullptr, LV_ALIGN_CENTER, 0, 0);
 
   y_offset += 60; // Adjust the offset for the next UI element
 
-  lblPushesToStop = lv_label_create(lv_scr_act(), nullptr);
-  lv_label_set_text_static(lblPushesToStop, "Pushes\nto Stop");
-  lv_obj_align(lblPushesToStop, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, y_offset);
+  btnPushesToStop = CreateSettingRow("Pushes\nto Stop", y_offset);
+  lv_label_set_text_fmt(lv_obj_get_child(btnPushesToStop, nullptr), "%d", infiniSleepController.infiniSleepSettings.pushesToStopAlarm);
+}
 
-  btnPushesToStop = lv_btn_create(lv_scr_act(), nullptr);
-  lv_obj_set_size(btnPushesToStop, 100, 50);
-  lv_obj_align(btnPushesToStop, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 130, y_offset);
-  btnPushesToStop->user_data = this;
-  lv_obj_set_event_cb(btnPushesToStop, btnEventHandler);
+void Sleep::DrawSensorsScreen() {
+  int16_t y_offset = 10;
 
-  lblPushesToStopValue = lv_label_create(btnPushesToStop, nullptr);
-  lv_label_set_text_fmt(lblPushesToStopValue, "%d", infiniSleepController.infiniSleepSettings.pushesToStopAlarm);
-  lv_obj_align(lblPushesToStopValue, nullptr, LV_ALIGN_CENTER, 0, 0);
+  btnHeartRateTracking = CreateSettingRow("Heart\nRate", y_offset);
+  lv_label_set_text_static(lv_obj_get_child(btnHeartRateTracking, nullptr),
+                           infiniSleepController.infiniSleepSettings.heartRateTracking ? "On" : "Off");
+
+  y_offset += 60;
+
+  btnBodyTracking = CreateSettingRow("Body\nMotion", y_offset);
+  lv_label_set_text_static(lv_obj_get_child(btnBodyTracking, nullptr),
+                           infiniSleepController.infiniSleepSettings.bodyTracking ? "On" : "Off");
+
+  y_offset += 60;
+
+  btnTrackerInterval = CreateSettingRow("Log\nEvery", y_offset);
+  lv_label_set_text_fmt(lv_obj_get_child(btnTrackerInterval, nullptr), "%dm", infiniSleepController.GetTrackerIntervalMinutes());
+
+  y_offset += 60;
+
+  btnMotionInterval = CreateSettingRow("Motion\nEvery", y_offset);
+  const uint8_t motionDs = infiniSleepController.GetMotionSampleIntervalDs();
+  lv_label_set_text_fmt(lv_obj_get_child(btnMotionInterval, nullptr), "%d.%ds", motionDs / 10, motionDs % 10);
 }
 
 void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
@@ -460,7 +526,8 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
       return;
     }
     if (obj == enableSwitch) {
-      if (lv_switch_get_state(enableSwitch)) {
+      const bool alarmEnabled = lv_switch_get_state(enableSwitch);
+      if (alarmEnabled) {
         infiniSleepController.ScheduleWakeAlarm();
       } else {
         infiniSleepController.DisableWakeAlarm();
@@ -469,27 +536,36 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
         infiniSleepController.RestorePreSnoozeTime();
       }
       infiniSleepController.isSnoozing = false;
+      if (alarmEnabled) {
+        // The alarm is set, so the next thing to do is to start the tracker
+        displayState = SleepDisplayState::Info;
+        UpdateDisplay();
+      }
       return;
     }
     if (obj == trackerToggleBtn) {
+      // Stopping the tracker asks for the same pushes as stopping the ringing alarm, so that it
+      // can't be turned off by a half asleep touch during the night
+      if (infiniSleepController.IsTrackerEnabled() && !StopPushConfirmed()) {
+        return;
+      }
       infiniSleepController.ToggleTracker();
       UpdateDisplay();
       return;
     }
     if (obj == btnSuggestedAlarm) {
-      // Set the suggested time
-      const uint16_t totalSuggestedMinutes = infiniSleepController.GetSuggestedSleepTime();
+      // Set the suggested time: current time + the desired number of sleep cycles
+      const uint16_t alarmTotalMinutes = infiniSleepController.GetTimeOfDayInMinutesFromNow(infiniSleepController.GetSuggestedSleepTime());
 
-      // Time for alarm, current time + suggested sleep time
-      // Convert current time to total minutes since midnight
-      const uint16_t currentTotalMinutes = infiniSleepController.GetCurrentHour() * 60 + infiniSleepController.GetCurrentMinute();
-      
-      // Add suggested sleep time
-      const uint16_t alarmTotalMinutes = (currentTotalMinutes + totalSuggestedMinutes) % (24 * 60);
-  
-      // Convert back to hours and minutes
       const uint8_t alarmHour = alarmTotalMinutes / 60;
       const uint8_t alarmMinute = alarmTotalMinutes % 60;
+
+      NRF_LOG_INFO("Suggested wake alarm: %02d:%02d + %d minutes -> %02d:%02d",
+                   infiniSleepController.GetCurrentHour(),
+                   infiniSleepController.GetCurrentMinute(),
+                   infiniSleepController.GetSuggestedSleepTime(),
+                   alarmHour,
+                   alarmMinute);
 
       infiniSleepController.SetWakeAlarmTime(alarmHour, alarmMinute);
 
@@ -499,6 +575,9 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
       OnValueChanged();
       infiniSleepController.ScheduleWakeAlarm();
       SetSwitchState(LV_ANIM_OFF);
+      // Setting the suggested time enables the alarm, so go on to the tracking page as well
+      displayState = SleepDisplayState::Info;
+      UpdateDisplay();
       return;
     }
     if (obj == btnWakeMode) {
@@ -516,12 +595,7 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
         infiniSleepController.infiniSleepSettings.naturalWake = false;
       }
       infiniSleepController.SetSettingsChanged();
-      const char* mode = (infiniSleepController.infiniSleepSettings.graddualWake && infiniSleepController.infiniSleepSettings.naturalWake)
-                           ? "Both"
-                         : infiniSleepController.infiniSleepSettings.graddualWake ? "Pre."
-                         : infiniSleepController.infiniSleepSettings.naturalWake  ? "Nat."
-                                                                                  : "Norm.";
-      lv_label_set_text_static(lv_obj_get_child(obj, nullptr), mode);
+      lv_label_set_text_static(lv_obj_get_child(obj, nullptr), WakeModeName(infiniSleepController.infiniSleepSettings));
       return;
     }
     if (obj == btnCycles) {
@@ -557,6 +631,34 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
       lv_label_set_text_fmt(lv_obj_get_child(obj, nullptr), "%d", value);
       return;
     }
+    if (obj == btnHeartRateTracking) {
+      const bool enabled = !infiniSleepController.infiniSleepSettings.heartRateTracking;
+      infiniSleepController.infiniSleepSettings.heartRateTracking = enabled;
+      infiniSleepController.SetSettingsChanged();
+      lv_label_set_text_static(lv_obj_get_child(obj, nullptr), enabled ? "On" : "Off");
+      return;
+    }
+    if (obj == btnBodyTracking) {
+      const bool enabled = !infiniSleepController.infiniSleepSettings.bodyTracking;
+      infiniSleepController.infiniSleepSettings.bodyTracking = enabled;
+      infiniSleepController.SetSettingsChanged();
+      lv_label_set_text_static(lv_obj_get_child(obj, nullptr), enabled ? "On" : "Off");
+      return;
+    }
+    if (obj == btnTrackerInterval) {
+      const uint8_t value = NextChoice(infiniSleepController.GetTrackerIntervalMinutes(), trackerIntervalChoices);
+      infiniSleepController.infiniSleepSettings.trackerIntervalMinutes = value;
+      infiniSleepController.SetSettingsChanged();
+      lv_label_set_text_fmt(lv_obj_get_child(obj, nullptr), "%dm", value);
+      return;
+    }
+    if (obj == btnMotionInterval) {
+      const uint8_t value = NextChoice(infiniSleepController.GetMotionSampleIntervalDs(), motionIntervalChoices);
+      infiniSleepController.infiniSleepSettings.motionSampleIntervalDs = value;
+      infiniSleepController.SetSettingsChanged();
+      lv_label_set_text_fmt(lv_obj_get_child(obj, nullptr), "%d.%ds", value / 10, value % 10);
+      return;
+    }
   }
 }
 
@@ -569,19 +671,29 @@ bool Sleep::OnButtonPushed() {
     OnButtonEvent(btnSnooze, LV_EVENT_CLICKED);
     return true;
   }
-  if (displayState != SleepDisplayState::Info) {
-    displayState = SleepDisplayState::Info;
+  // Back to the wake up time setter, which is the home page of the app. While the tracker runs
+  // the pages are locked, so the button closes the app instead
+  if (!infiniSleepController.IsTrackerEnabled() && displayState != SleepDisplayState::Alarm) {
+    displayState = SleepDisplayState::Alarm;
     UpdateDisplay();
     return true;
   }
   return false;
 }
 
-bool Sleep::StopAlarmPush() {
+bool Sleep::StopPushConfirmed() {
   if (infiniSleepController.pushesLeftToStopWakeAlarm > 1) {
     lv_task_reset(taskPressesToStopAlarmTimeout);
     infiniSleepController.pushesLeftToStopWakeAlarm--;
     UpdateDisplay();
+    return false;
+  }
+  infiniSleepController.pushesLeftToStopWakeAlarm = infiniSleepController.infiniSleepSettings.pushesToStopAlarm;
+  return true;
+}
+
+bool Sleep::StopAlarmPush() {
+  if (!StopPushConfirmed()) {
     return true;
   }
 
@@ -610,23 +722,25 @@ bool Sleep::OnTouchEvent(Pinetime::Applications::TouchEvents event) {
     return true;
   }
 
-  lastDisplayState = displayState;
-  NRF_LOG_INFO("Last Display State: %d", static_cast<uint8_t>(lastDisplayState));
+  // While the tracker runs the app stays on the tracking page, so neither the wake up time
+  // nor the settings can be changed during the night
+  if (infiniSleepController.IsTrackerEnabled() && (event == TouchEvents::SwipeDown || event == TouchEvents::SwipeUp)) {
+    return true;
+  }
 
   // The cases for swiping to change page on app
   switch (event) {
     case TouchEvents::SwipeDown:
-      if (static_cast<uint8_t>(displayState) != 0) {
-        displayApp.SetFullRefresh(Pinetime::Applications::DisplayApp::FullRefreshDirections::Down);
-        displayState = static_cast<SleepDisplayState>(static_cast<int>(displayState) - 1);
-        UpdateDisplay();
-      } else {
+      if (displayState == firstPage) {
         return false;
       }
+      displayApp.SetFullRefresh(Pinetime::Applications::DisplayApp::FullRefreshDirections::Down);
+      displayState = static_cast<SleepDisplayState>(static_cast<uint8_t>(displayState) - 1);
+      UpdateDisplay();
       NRF_LOG_INFO("SwipeDown: %d", static_cast<uint8_t>(displayState));
       return true;
     case TouchEvents::SwipeUp:
-      if (static_cast<uint8_t>(displayState) != 2) {
+      if (displayState != lastPage) {
         displayApp.SetFullRefresh(Pinetime::Applications::DisplayApp::FullRefreshDirections::Up);
         displayState = static_cast<SleepDisplayState>(static_cast<uint8_t>(displayState) + 1);
         UpdateDisplay();
@@ -655,8 +769,8 @@ void Sleep::SnoozeWakeAlarm() {
 
   NRF_LOG_INFO("Snoozing alarm for %d minutes", SNOOZE_MINUTES);
 
-  const uint16_t totalAlarmMinutes = infiniSleepController.GetCurrentHour() * 60 + infiniSleepController.GetCurrentMinute();
-  const uint16_t newSnoozeMinutes = totalAlarmMinutes + SNOOZE_MINUTES;
+  // Wraps over midnight, so snoozing at 23:58 gives 00:01 and not 24:01
+  const uint16_t newSnoozeMinutes = infiniSleepController.GetTimeOfDayInMinutesFromNow(SNOOZE_MINUTES);
 
   if (infiniSleepController.isSnoozing != true) {
     infiniSleepController.SetPreSnoozeTime();
