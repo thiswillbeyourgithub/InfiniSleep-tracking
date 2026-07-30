@@ -1,4 +1,5 @@
 #include "systemtask/SystemTask.h"
+#include <chrono>
 #include <hal/nrf_rtc.h>
 #include <libraries/gpiote/app_gpiote.h>
 #include <libraries/log/nrf_log.h>
@@ -32,6 +33,11 @@ void MeasureBatteryTimerCallback(TimerHandle_t xTimer) {
   sysTask->PushMessage(Pinetime::System::Messages::MeasureBatteryTimerExpired);
 }
 
+void HeartRateSettleTimerCallback(TimerHandle_t xTimer) {
+  auto* sysTask = static_cast<SystemTask*>(pvTimerGetTimerID(xTimer));
+  sysTask->PushMessage(Pinetime::System::Messages::SleepTrackerHeartRateReady);
+}
+
 SystemTask::SystemTask(Drivers::SpiMaster& spi,
                        Pinetime::Drivers::SpiNorFlash& spiNorFlash,
                        Drivers::TwiMaster& twiMaster,
@@ -52,7 +58,8 @@ SystemTask::SystemTask(Drivers::SpiMaster& spi,
                        Pinetime::Controllers::FS& fs,
                        Pinetime::Controllers::TouchHandler& touchHandler,
                        Pinetime::Controllers::ButtonHandler& buttonHandler,
-                       Pinetime::Controllers::InfiniSleepController& infiniSleepController)
+                       Pinetime::Controllers::InfiniSleepController& infiniSleepController,
+                       Pinetime::Controllers::ActivityLogController& activityLogController)
   : spi {spi},
     spiNorFlash {spiNorFlash},
     twiMaster {twiMaster},
@@ -81,8 +88,10 @@ SystemTask::SystemTask(Drivers::SpiMaster& spi,
                      spiNorFlash,
                      heartRateController,
                      motionController,
+                     activityLogController,
                      fs),
-    infiniSleepController {infiniSleepController} {
+    infiniSleepController {infiniSleepController},
+    activityLogController {activityLogController} {
 }
 
 void SystemTask::Start() {
@@ -114,6 +123,9 @@ void SystemTask::Work() {
 
   fs.Init();
 
+  // Before the BLE stack, which exposes the log to a host as soon as it is up.
+  activityLogController.Init();
+
   nimbleController.Init();
 
   twiMaster.Init();
@@ -137,7 +149,7 @@ void SystemTask::Work() {
   twiMaster.Init();
 
   motionSensor.Init();
-  motionController.Init(motionSensor.DeviceType());
+  motionController.Init(motionSensor.DeviceType(), motionSensor.GetDiagnostics());
   settingsController.Init();
 
   displayApp.Register(this);
@@ -183,13 +195,34 @@ void SystemTask::Work() {
   measureBatteryTimer = xTimerCreate("measureBattery", batteryMeasurementPeriod, pdTRUE, this, MeasureBatteryTimerCallback);
   xTimerStart(measureBatteryTimer, portMAX_DELAY);
 
+  heartRateSettleTimer = xTimerCreate("hrSettle", heartRateSettlePeriod, pdFALSE, this, HeartRateSettleTimerCallback);
+
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
   while (true) {
     UpdateMotion();
 
+    // Epochs are recorded while the watch is asleep, when the external flash is powered down
+    // and the SPI peripheral disabled, so the ring in RAM is the authority and this mirrors it
+    // whenever the watch happens to be awake. AODSleeping does not count: it keeps SPI alive
+    // for the display but still sleeps the flash.
+    if (state == SystemTaskState::Running && activityLogController.IsDirty()) {
+      activityLogController.Flush();
+    }
+
+    // The night's records only exist in RAM until the watch is next woken, so a battery that
+    // dies before morning takes them with it. This is the one moment where that stops being
+    // hypothetical, so it is worth the cost of waking the flash to write them out. Checked here
+    // rather than when the battery is measured, because the level is updated asynchronously.
+    const bool batteryLow = IsBatteryLow();
+    if (batteryLow && !batteryWasLow) {
+      NRF_LOG_INFO("[systemtask] Battery is low, saving the activity log while there is power to");
+      FlushActivityLogFromAnyState();
+    }
+    batteryWasLow = batteryLow;
+
     Messages msg;
-    if (xQueueReceive(systemTasksMsgQueue, &msg, 100) == pdTRUE) {
+    if (xQueueReceive(systemTasksMsgQueue, &msg, MotionPollPeriod()) == pdTRUE) {
       switch (msg) {
         case Messages::EnableSleeping:
           wakeLocksHeld--;
@@ -374,7 +407,14 @@ void SystemTask::Work() {
           }
           break;
         case Messages::SleepTrackerUpdate:
+          // Reapplied every epoch rather than once when tracking starts, because the battery
+          // crosses the threshold during the night, not before it.
+          infiniSleepController.SetTrackerPeriodMinutes(EffectiveTrackerIntervalMinutes());
+          BeginActivityEpoch();
           displayApp.PushMessage(Pinetime::Applications::Display::Messages::SleepTrackerUpdate);
+          break;
+        case Messages::SleepTrackerHeartRateReady:
+          RecordActivityEpoch();
           break;
         default:
           break;
@@ -447,12 +487,174 @@ void SystemTask::GoToSleep() {
   state = SystemTaskState::GoingToSleep;
 };
 
+bool SystemTask::MotionWantedBySleepTracker() const {
+  // Both conditions matter. Without the setting the log would carry a motion figure the user
+  // did not ask for, and without the device check a watch whose accelerometer never answered,
+  // which is the case on the watch this was written on, would be woken to read it all night
+  // and record nothing but "not measured" for the trouble.
+  return infiniSleepController.IsTrackerEnabled() && infiniSleepController.GetInfiniSleepSettings().bodyTracking &&
+         motionController.DeviceType() != Controllers::MotionController::DeviceTypes::Unknown;
+}
+
+bool SystemTask::MotionNeededAtFullRate() const {
+  return settingsController.isWakeUpModeOn(Pinetime::Controllers::Settings::WakeUpMode::RaiseWrist) ||
+         settingsController.isWakeUpModeOn(Pinetime::Controllers::Settings::WakeUpMode::Shake) ||
+         motionController.GetService()->IsMotionNotificationSubscribed();
+}
+
+void SystemTask::FlushActivityLogFromAnyState() {
+  if (!activityLogController.IsDirty()) {
+    return;
+  }
+
+  // Writing to flash while the peripherals that reach it are powered down does not fail, it
+  // blocks forever on a DMA completion that never comes, holding the SPI mutex the display
+  // needs. So they are woken here for the duration and put back exactly as they were found,
+  // mirroring GoToRunning() and the OnDisplayTaskSleeping handler. Safe without a wake lock
+  // because this runs on the task that would process a wake up message, so no state change can
+  // land in the middle of it.
+  const bool spiWasAsleep = state == SystemTaskState::Sleeping;
+  const bool flashWasAsleep = spiWasAsleep || state == SystemTaskState::AODSleeping;
+
+  if (spiWasAsleep) {
+    spi.Wakeup();
+  }
+  if (flashWasAsleep) {
+    spiNorFlash.Wakeup();
+  }
+
+  activityLogController.Flush();
+
+  // Same condition the sleep path uses: the earliest bootloaders cannot bring the flash back
+  // out of sleep, so on those it is never put to sleep in the first place.
+  if (flashWasAsleep && BootloaderVersion::IsValid()) {
+    spiNorFlash.Sleep();
+  }
+  if (spiWasAsleep) {
+    spi.Sleep();
+  }
+}
+
+bool SystemTask::IsBatteryLow() const {
+  return !batteryController.IsPowerPresent() && batteryController.PercentRemaining() < lowBatteryPercentage;
+}
+
+uint8_t SystemTask::EffectiveTrackerIntervalMinutes() const {
+  const uint8_t wanted = infiniSleepController.GetTrackerIntervalMinutes();
+  if (IsBatteryLow() && wanted < lowBatteryTrackerIntervalMinutes) {
+    return lowBatteryTrackerIntervalMinutes;
+  }
+  return wanted;
+}
+
+uint8_t SystemTask::EffectiveMotionSampleIntervalDs() const {
+  const uint8_t wanted = infiniSleepController.GetMotionSampleIntervalDs();
+  if (IsBatteryLow() && wanted < lowBatteryMotionSampleIntervalDs) {
+    return lowBatteryMotionSampleIntervalDs;
+  }
+  return wanted;
+}
+
+TickType_t SystemTask::MotionPollPeriod() const {
+  // ~10 Hz at the 1024 Hz tick, which is what the wake gesture thresholds are tuned for.
+  constexpr TickType_t defaultPeriod = 100;
+
+  if (state != SystemTaskState::Sleeping) {
+    return defaultPeriod;
+  }
+  if (MotionNeededAtFullRate()) {
+    return defaultPeriod;
+  }
+  if (!MotionWantedBySleepTracker()) {
+    return defaultPeriod;
+  }
+
+  // Asleep, with the sleep tracker the only thing that wants motion. Nothing here needs to
+  // react quickly, so the sampling rate is the user's to trade against battery.
+  return pdMS_TO_TICKS(EffectiveMotionSampleIntervalDs() * 100);
+}
+
+void SystemTask::BeginActivityEpoch() {
+  if (activityEpochMeasuring) {
+    // The previous epoch is still waiting on the sensor. Skipping is better than stacking:
+    // it can only happen if the settle window is longer than the epoch, and the reading in
+    // flight is the fresher one anyway.
+    return;
+  }
+
+  const auto settings = infiniSleepController.GetInfiniSleepSettings();
+
+  // While the watch is awake the heart rate task belongs to whatever the user is doing with
+  // it, so it is read but never driven. While the watch is asleep the task has been stopped
+  // by GoToSleep and nobody else is using it, which is the only case where taking it over is
+  // safe, and also the only case where it would otherwise report nothing all night.
+  // No timer means no way to wait for the sensor, so record what is already known rather than
+  // handing FreeRTOS a null handle.
+  const bool shouldMeasure = settings.heartRateTracking && state == SystemTaskState::Sleeping && heartRateSettleTimer != nullptr;
+
+  if (!shouldMeasure) {
+    RecordActivityEpoch();
+    return;
+  }
+
+  activityEpochMeasuring = true;
+  activityEpochOwnsHeartRate = true;
+  heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::WakeUp);
+  heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::StartMeasurement);
+  xTimerStart(heartRateSettleTimer, 0);
+}
+
+void SystemTask::RecordActivityEpoch() {
+  Pinetime::Controllers::ActivityRecord record;
+
+  record.timestamp =
+    std::chrono::duration_cast<std::chrono::seconds>(dateTimeController.UTCDateTime().time_since_epoch()).count();
+
+  // Everything recorded while the tracker is running is reported as asleep. The watch has no
+  // basis for a finer claim: actigraphy and an occasional heart rate cannot separate sleep
+  // stages, and guessing awake from asleep within a session would be a guess presented as a
+  // measurement.
+  record.kind = Pinetime::Controllers::ActivityKind::Asleep;
+
+  const auto settings = infiniSleepController.GetInfiniSleepSettings();
+
+  if (settings.heartRateTracking) {
+    // The state matters as much as the value. HeartRateController holds its last reading
+    // indefinitely, so without this an epoch where the sensor never converged would be
+    // recorded with a heart rate from hours earlier, indistinguishable from a real one.
+    const uint8_t heartRate = heartRateController.HeartRate();
+    if (heartRateController.State() == Controllers::HeartRateController::States::Running && heartRate > 0) {
+      record.heartRate = heartRate;
+    }
+  }
+
+  // Taken unconditionally so the accumulator does not carry movement from an epoch that was
+  // not recorded into one that is.
+  const uint16_t motion = motionController.TakeActivityCounts();
+  if (MotionWantedBySleepTracker()) {
+    record.motion = motion;
+  }
+
+  activityLogController.Add(record);
+
+  if (activityEpochOwnsHeartRate) {
+    // Only hand the sensor back if the watch is still asleep. The user may have picked it up
+    // during the settle window, in which case the heart rate app may now be driving the sensor
+    // itself and stopping it here would kill a measurement they are watching.
+    if (state == SystemTaskState::Sleeping) {
+      heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::StopMeasurement);
+      heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::GoToSleep);
+    }
+    activityEpochOwnsHeartRate = false;
+  }
+  activityEpochMeasuring = false;
+}
+
 void SystemTask::UpdateMotion() {
   // Only consider disabling motion updates specifically in the Sleeping state
   // AOD needs motion on to show up to date step counts
-  if (state == SystemTaskState::Sleeping && !(settingsController.isWakeUpModeOn(Pinetime::Controllers::Settings::WakeUpMode::RaiseWrist) ||
-                                              settingsController.isWakeUpModeOn(Pinetime::Controllers::Settings::WakeUpMode::Shake) ||
-                                              motionController.GetService()->IsMotionNotificationSubscribed())) {
+  // The sleep tracker needs it too, and it runs precisely while the watch is asleep
+  if (state == SystemTaskState::Sleeping && !MotionNeededAtFullRate() && !MotionWantedBySleepTracker()) {
     return;
   }
 

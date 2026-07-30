@@ -44,6 +44,9 @@ void MotionController::Update(int16_t x, int16_t y, int16_t z, uint32_t nbSteps)
     service->OnNewMotionValues(x, y, z);
   }
 
+  // Before the history advances, while xHistory[0] is still the previous sample.
+  activityCounts += std::abs(x - xHistory[0]) + std::abs(y - yHistory[0]) + std::abs(z - zHistory[0]);
+
   lastTime = time;
   time = xTaskGetTickCount();
 
@@ -61,6 +64,14 @@ void MotionController::Update(int16_t x, int16_t y, int16_t z, uint32_t nbSteps)
     currentTripSteps += deltaSteps;
   }
   this->nbSteps = nbSteps;
+}
+
+uint16_t MotionController::TakeActivityCounts() {
+  const uint32_t counts = activityCounts.exchange(0) >> activityCountShift;
+  // 0xFFFF is reserved by the record format to mean the epoch was not measured, so a genuinely
+  // enormous epoch has to stop one short of it rather than be mistaken for no data at all.
+  constexpr uint32_t maxCounts = 0xFFFE;
+  return counts > maxCounts ? maxCounts : static_cast<uint16_t>(counts);
 }
 
 MotionController::AccelStats MotionController::GetAccelStats() const {
@@ -141,7 +152,10 @@ bool MotionController::ShouldLowerSleep() const {
   return true;
 }
 
-void MotionController::Init(Pinetime::Drivers::Bma421::DeviceTypes types) {
+void MotionController::Init(Pinetime::Drivers::Bma421::DeviceTypes types,
+                            const Pinetime::Drivers::Bma421::Diagnostics& diagnostics) {
+  this->diagnostics = diagnostics;
+
   switch (types) {
     case Drivers::Bma421::DeviceTypes::BMA421:
       this->deviceType = DeviceTypes::BMA421;

@@ -17,6 +17,7 @@
 #include "components/ble/NotificationManager.h"
 #include "components/alarm/AlarmController.h"
 #include "components/infinisleep/InfiniSleepController.h"
+#include "components/activity/ActivityLogController.h"
 #include "components/fs/FS.h"
 #include "touchhandler/TouchHandler.h"
 #include "buttonhandler/ButtonHandler.h"
@@ -74,7 +75,8 @@ namespace Pinetime {
                  Pinetime::Controllers::FS& fs,
                  Pinetime::Controllers::TouchHandler& touchHandler,
                  Pinetime::Controllers::ButtonHandler& buttonHandler,
-                 Pinetime::Controllers::InfiniSleepController& infiniSleepController);
+                 Pinetime::Controllers::InfiniSleepController& infiniSleepController,
+                 Pinetime::Controllers::ActivityLogController& activityLogController);
 
       void Start();
       void PushMessage(Messages msg);
@@ -119,12 +121,17 @@ namespace Pinetime {
       Pinetime::Controllers::ButtonHandler& buttonHandler;
       Pinetime::Controllers::NimbleController nimbleController;
       Pinetime::Controllers::InfiniSleepController& infiniSleepController;
+      Pinetime::Controllers::ActivityLogController& activityLogController;
 
       static void Process(void* instance);
       void Work();
       bool isBleDiscoveryTimerRunning = false;
       uint8_t bleDiscoveryTimer = 0;
       TimerHandle_t measureBatteryTimer;
+      // Initialised, unlike the one above, because BeginActivityEpoch null checks it before
+      // use. It is created partway through Work(), so an uninitialised handle here would pass
+      // that check with garbage during the whole of startup.
+      TimerHandle_t heartRateSettleTimer = nullptr;
       uint8_t wakeLocksHeld = 0;
       SystemTaskState state = SystemTaskState::Running;
 
@@ -134,8 +141,57 @@ namespace Pinetime {
       void GoToRunning();
       void GoToSleep();
       void UpdateMotion();
+      /// True when something that reacts to movement as it happens, a wake gesture or a BLE
+      /// subscriber, needs the accelerometer read at the full rate.
+      bool MotionNeededAtFullRate() const;
+      /// True when the sleep tracker wants the accelerometer kept alive overnight, which needs
+      /// both the setting and a sensor that actually answered at boot.
+      bool MotionWantedBySleepTracker() const;
+      /// How long to wait between accelerometer reads, in ticks.
+      TickType_t MotionPollPeriod() const;
+
+      /// Writes the activity log to flash whatever state the watch is in, waking the flash and
+      /// the SPI peripheral for the write when they are asleep and putting them back after.
+      /// Only worth its cost at a moment the records are about to be lost; the ordinary path is
+      /// the flush in the main loop, which waits until the watch is awake anyway.
+      void FlushActivityLogFromAnyState();
+
+      /// True when the battery is low enough that sleep tracking should back off. Charging does
+      /// not count as low however far down it started, since the cost no longer matters.
+      bool IsBatteryLow() const;
+      /// So that crossing the threshold can be acted on once, rather than every loop below it.
+      bool batteryWasLow = false;
+      /// The two sampling rates the tracker actually runs at, which are the user's settings
+      /// except when the battery is low, where they are only ever made slower, never faster.
+      uint8_t EffectiveTrackerIntervalMinutes() const;
+      uint8_t EffectiveMotionSampleIntervalDs() const;
+
+      /// Begins one tracker epoch: turns the heart rate sensor on if it is wanted, otherwise
+      /// records straight away.
+      void BeginActivityEpoch();
+      /// Closes one tracker epoch into the activity log, and turns the sensor back off.
+      void RecordActivityEpoch();
+      /// True while an epoch is waiting on the heart rate sensor, so a second tracker tick
+      /// cannot start a measurement on top of the one already running.
+      bool activityEpochMeasuring = false;
+      /// True when this class turned the sensor on and therefore owes it a turn off. Never set
+      /// while the watch is awake, where the user's own measurement must not be interfered with.
+      bool activityEpochOwnsHeartRate = false;
+
       bool stepCounterMustBeReset = false;
       static constexpr TickType_t batteryMeasurementPeriod = pdMS_TO_TICKS(10 * 60 * 1000);
+      /// How long the photoplethysmograph is given to produce a reading before the epoch is
+      /// recorded with whatever it has. Long enough that a still wrist usually converges,
+      /// short enough that at a fifteen minute epoch the sensor is on about 3% of the night.
+      static constexpr TickType_t heartRateSettlePeriod = pdMS_TO_TICKS(30 * 1000);
+
+      /// Below this, and not charging, the tracker trades resolution for the chance of still
+      /// being alive in the morning. A tracker that flattens the battery at 4am records a
+      /// truncated night and cannot report the wake up it exists to catch.
+      static constexpr uint8_t lowBatteryPercentage = 25;
+      /// Floors, not values: a user who already asked for something slower keeps it.
+      static constexpr uint8_t lowBatteryTrackerIntervalMinutes = 30;
+      static constexpr uint8_t lowBatteryMotionSampleIntervalDs = 10;
 
       SystemMonitor monitor;
     };

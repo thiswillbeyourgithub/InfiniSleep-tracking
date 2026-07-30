@@ -33,6 +33,8 @@ namespace Pinetime {
       StopFileTransfer,
       BleRadioEnableToggle,
       SleepTrackerUpdate,
+      // The heart rate sensor has had long enough to settle, so the epoch can be recorded.
+      SleepTrackerHeartRateReady,
     };
   }
 }

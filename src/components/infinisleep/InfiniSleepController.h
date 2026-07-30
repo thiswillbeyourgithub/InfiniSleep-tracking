@@ -109,6 +109,11 @@ namespace Pinetime {
       }
 
       void EnableTracker();
+
+      /// Retunes the running epoch timer. Used to back the tracker off when the battery gets
+      /// low, which SystemTask decides because it is the one holding the battery controller.
+      /// A no-op if the timer does not exist yet, so it is safe to call before tracking starts.
+      void SetTrackerPeriodMinutes(uint8_t minutes);
       void DisableTracker();
       void UpdateTracker();
 
@@ -119,6 +124,8 @@ namespace Pinetime {
       // Versions 255 is reserved for now, so the version field can be made
       // bigger, should it ever be needed.
       static constexpr uint8_t wakeAlarmFormatVersion = 1;
+
+      static constexpr uint16_t minutesPerDay = 24 * 60;
 
       struct WakeAlarmSettings {
         static constexpr uint8_t version = wakeAlarmFormatVersion;
@@ -161,11 +168,28 @@ namespace Pinetime {
         return infiniSleepSettings.desiredCycles * infiniSleepSettings.sleepCycleDuration;
       }
 
+      // Time of day, in minutes since midnight, that is offsetMinutes from now.
+      // The whole time of day is carried through a single modulo so that the hour
+      // is never dropped when the minutes wrap over the hour or over midnight.
+      uint16_t GetTimeOfDayInMinutesFromNow(uint16_t offsetMinutes) const {
+        return (GetCurrentHour() * 60 + GetCurrentMinute() + offsetMinutes) % minutesPerDay;
+      }
+
       WakeAlarmSettings GetWakeAlarm() const {
         return wakeAlarm;
       }
 
+      // This struct is written to and read from flash as raw bytes with no version field, so
+      // new members may only be appended, never inserted or reordered. A file written by an
+      // older firmware is shorter, and the loader leaves whatever it does not cover at the
+      // defaults below.
       struct InfiniSleepSettings {
+        // Off by default on purpose. The accelerometer in the watch this was developed on is
+        // dead, so the motion path is written for watches whose sensor works but has never
+        // produced a real number on hardware. Shipping it off means nobody gets a column of
+        // numbers nobody has checked, while a user with a working sensor can turn it on from
+        // the Sensors page. SystemTask also refuses to run it when no sensor answered at boot,
+        // so turning it on cannot cost battery on a watch like this one.
         bool bodyTracking = false;
         bool heartRateTracking = true;
         bool graddualWake = false;
@@ -175,7 +199,48 @@ namespace Pinetime {
         uint8_t motorStrength = 100;
         bool naturalWake = false;
         uint8_t pushesToStopAlarm = PUSHES_TO_STOP_ALARM;
+
+        // How often an activity record is written, and so how often the heart rate is measured
+        // overnight. Longer is cheaper in battery and covers more of the night in the fixed
+        // size activity log; shorter draws a finer curve.
+        uint8_t trackerIntervalMinutes = TRACKER_UPDATE_INTERVAL_MINS;
+
+        // How often the accelerometer is read while sleep tracking, in tenths of a second.
+        // Only takes effect while the watch is asleep and nothing else needs motion, since
+        // wake gestures need the full rate to work at all.
+        //
+        // Note this changes the scale of the recorded motion counts, which are a sum over the
+        // epoch: half the samples, roughly half the count for the same movement. Comparing
+        // nights recorded at different rates is not meaningful.
+        uint8_t motionSampleIntervalDs = 1;
       };
+
+      // Guard rails for the two above, so a corrupt or truncated settings file cannot leave
+      // the tracker with a zero period timer.
+      static constexpr uint8_t minTrackerIntervalMinutes = 1;
+      static constexpr uint8_t maxTrackerIntervalMinutes = 60;
+      static constexpr uint8_t minMotionSampleIntervalDs = 1;
+      static constexpr uint8_t maxMotionSampleIntervalDs = 50;
+
+      uint8_t GetTrackerIntervalMinutes() const {
+        if (infiniSleepSettings.trackerIntervalMinutes < minTrackerIntervalMinutes) {
+          return minTrackerIntervalMinutes;
+        }
+        if (infiniSleepSettings.trackerIntervalMinutes > maxTrackerIntervalMinutes) {
+          return maxTrackerIntervalMinutes;
+        }
+        return infiniSleepSettings.trackerIntervalMinutes;
+      }
+
+      uint8_t GetMotionSampleIntervalDs() const {
+        if (infiniSleepSettings.motionSampleIntervalDs < minMotionSampleIntervalDs) {
+          return minMotionSampleIntervalDs;
+        }
+        if (infiniSleepSettings.motionSampleIntervalDs > maxMotionSampleIntervalDs) {
+          return maxMotionSampleIntervalDs;
+        }
+        return infiniSleepSettings.motionSampleIntervalDs;
+      }
 
       InfiniSleepSettings infiniSleepSettings;
 
@@ -259,7 +324,11 @@ namespace Pinetime {
       System::SystemTask* systemTask = nullptr;
       TimerHandle_t wakeAlarmTimer;
       TimerHandle_t gradualWakeTimer;
-      TimerHandle_t trackerUpdateTimer;
+      // Created lazily by EnableTracker(), so it must start null for that check to work.
+      TimerHandle_t trackerUpdateTimer = nullptr;
+      /// The period currently loaded into trackerUpdateTimer, in minutes. Tracked here rather
+      /// than read back from the timer so that no FreeRTOS query API is relied on.
+      uint8_t trackerPeriodMinutes = 0;
       std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> wakeAlarmTime;
 
       void LoadSettingsFromFile();

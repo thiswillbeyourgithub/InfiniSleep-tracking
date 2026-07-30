@@ -56,25 +56,49 @@ void InfiniSleepController::Init(System::SystemTask* systemTask) {
 
 void InfiniSleepController::EnableTracker() {
   // DisableTracker();
-  NRF_LOG_INFO("[InfiniSleepController] Enabling tracker");
+  NRF_LOG_INFO("[InfiniSleepController] Enabling tracker every %u minutes", GetTrackerIntervalMinutes());
   isEnabled = true;
-  trackerUpdateTimer =
-    xTimerCreate("TrackerUpdate", pdMS_TO_TICKS(TRACKER_UPDATE_INTERVAL_MINS * 60 * 1000), pdFALSE, this, SetOffTrackerUpdate);
+  // Created once and reused. Creating one per enable leaked a timer, and the pool is small
+  // enough that a few nights of toggling the tracker would exhaust it.
+  if (trackerUpdateTimer == nullptr) {
+    trackerUpdateTimer = xTimerCreate("TrackerUpdate", 1, pdFALSE, this, SetOffTrackerUpdate);
+  }
+  // The period is applied here rather than at creation so a change to the setting takes effect
+  // the next time tracking starts, without needing a reboot. Forced through, because the
+  // tracked value survives from the previous session and may equal what is being asked for
+  // while the timer itself is dormant.
+  trackerPeriodMinutes = 0;
+  SetTrackerPeriodMinutes(GetTrackerIntervalMinutes());
   xTimerStart(trackerUpdateTimer, 0);
+}
+
+void InfiniSleepController::SetTrackerPeriodMinutes(uint8_t minutes) {
+  if (trackerUpdateTimer == nullptr || minutes == 0) {
+    return;
+  }
+  if (minutes == trackerPeriodMinutes) {
+    // Skipped rather than reapplied, because xTimerChangePeriod also restarts the timer, so
+    // calling it every epoch with the same value would push the next epoch back each time.
+    return;
+  }
+  NRF_LOG_INFO("[InfiniSleepController] Tracker period is now %u minutes", minutes);
+  trackerPeriodMinutes = minutes;
+  xTimerChangePeriod(trackerUpdateTimer, pdMS_TO_TICKS(minutes * 60 * 1000), 0);
 }
 
 void InfiniSleepController::DisableTracker() {
   NRF_LOG_INFO("[InfiniSleepController] Disabling tracker");
-  xTimerStop(trackerUpdateTimer, 0);
+  if (trackerUpdateTimer != nullptr) {
+    xTimerStop(trackerUpdateTimer, 0);
+  }
   isEnabled = false;
 }
 
 void InfiniSleepController::UpdateTracker() {
   NRF_LOG_INFO("[InfiniSleepController] Updating tracker");
 
-  if (infiniSleepSettings.heartRateTracking) {
-    // UpdateBPM();
-  }
+  // SystemTask does the work: it owns the heart rate task and the motion controller, and it
+  // runs on a task that may block on the filesystem, which the timer daemon must not.
   systemTask->PushMessage(System::Messages::SleepTrackerUpdate);
 
   xTimerStop(trackerUpdateTimer, 0);
@@ -315,11 +339,24 @@ void InfiniSleepController::LoadSettingsFromFile() {
     return;
   }
 
-  fs.FileRead(&infiniSleepSettingsFile, reinterpret_cast<uint8_t*>(&infiniSleepSettingsBuffer), sizeof(infiniSleepSettingsBuffer));
+  // There is no version field in this struct, so the length of the file is the only thing that
+  // says which members it actually contains. Members are only ever appended, and the buffer is
+  // default constructed, so anything the file is too short to cover keeps its default. Reading
+  // fewer bytes than expected is therefore normal after a firmware update, not an error.
+  const int settingsRead = fs.FileRead(&infiniSleepSettingsFile,
+                                       reinterpret_cast<uint8_t*>(&infiniSleepSettingsBuffer),
+                                       sizeof(infiniSleepSettingsBuffer));
   fs.FileClose(&infiniSleepSettingsFile);
 
+  if (settingsRead <= 0) {
+    NRF_LOG_WARNING("[InfiniSleepController] InfiniSleep settings file is empty, keeping defaults");
+    return;
+  }
+
   infiniSleepSettings = infiniSleepSettingsBuffer;
-  NRF_LOG_INFO("[InfiniSleepController] Loaded InfiniSleep settings from file");
+  NRF_LOG_INFO("[InfiniSleepController] Loaded %d of %u bytes of InfiniSleep settings from file",
+               settingsRead,
+               static_cast<unsigned>(sizeof(infiniSleepSettingsBuffer)));
 }
 
 void InfiniSleepController::SaveSettingsToFile() const {
