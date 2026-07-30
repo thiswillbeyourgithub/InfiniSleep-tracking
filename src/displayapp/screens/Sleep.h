@@ -31,10 +31,12 @@ namespace Pinetime {
         void StopAlerting(bool setSwitch = true);
         void SnoozeWakeAlarm();
         void UpdateDisplay();
-        // Pages from top to bottom: swiping down goes to the settings, swiping up to the info page.
-        // Alarm (the wake up time setter) is the page the app starts on.
-        enum class SleepDisplayState { Settings, Sensors, Alarm, Info };
-        static constexpr SleepDisplayState firstPage = SleepDisplayState::Settings;
+        // Pages from top to bottom: the sensor settings, then the alarm settings, then the wake up
+        // time setter, then the tracking page. Swiping down walks up that list, swiping up walks
+        // down it. Alarm is the page the app starts on, since it is the one there is a reason to
+        // open the app for.
+        enum class SleepDisplayState { Sensors, Settings, Alarm, Info };
+        static constexpr SleepDisplayState firstPage = SleepDisplayState::Sensors;
         static constexpr SleepDisplayState lastPage = SleepDisplayState::Info;
         SleepDisplayState displayState = SleepDisplayState::Alarm;
 
@@ -99,8 +101,8 @@ namespace Pinetime {
 
         lv_obj_t *btnHeartRateTracking, *btnBodyTracking, *btnTrackerInterval, *btnMotionInterval;
 
-        Widgets::PageIndicator pageIndicatorSettings = Widgets::PageIndicator(0, 4);
-        Widgets::PageIndicator pageIndicatorSensors = Widgets::PageIndicator(1, 4);
+        Widgets::PageIndicator pageIndicatorSensors = Widgets::PageIndicator(0, 4);
+        Widgets::PageIndicator pageIndicatorSettings = Widgets::PageIndicator(1, 4);
         Widgets::PageIndicator pageIndicatorAlarm = Widgets::PageIndicator(2, 4);
         Widgets::PageIndicator pageIndicatorInfo = Widgets::PageIndicator(3, 4);
       };
