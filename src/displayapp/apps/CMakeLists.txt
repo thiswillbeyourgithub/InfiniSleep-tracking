@@ -1,9 +1,11 @@
 if(DEFINED ENABLE_USERAPPS)
     set(USERAPP_TYPES ${ENABLE_USERAPPS} CACHE STRING "List of user apps to build into the firmware")
 else ()
-    # Local to this fork: the games and Paint are commented out to buy flash for the sleep
-    # tracking work, in the same style as the Navigation and Motion lines already here. Pass
-    # -DENABLE_USERAPPS=... to override the whole list without touching this file.
+    # Local to this fork: the games, Paint and the Metronome are commented out, to buy flash for
+    # the sleep tracking work and because they are not used, in the same style as the Navigation
+    # and Motion lines already here. Pass -DENABLE_USERAPPS=... to override the whole list
+    # without touching this file. Note that USERAPP_TYPES is a cache variable, so a stale
+    # CMakeCache.txt keeps the old list: edits here need a clean build to take effect.
     set(DEFAULT_USER_APP_TYPES "Apps::StopWatch")
     set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Alarm")
     set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Timer")
@@ -14,7 +16,7 @@ else ()
     #set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Paddle")  # local: dropped for flash
     #set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Twos")  # local: dropped for flash
     #set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Dice")  # local: dropped for flash
-    set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Metronome")
+    #set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Metronome")  # local: dropped, unused
     #set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Navigation")
     set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Calculator")
     set(DEFAULT_USER_APP_TYPES "${DEFAULT_USER_APP_TYPES}, Apps::Weather")
