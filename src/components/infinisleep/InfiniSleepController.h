@@ -268,6 +268,11 @@ namespace Pinetime {
 
           SavePrevSessionData();
           DisableTracker();
+          // Stopping the tracker means the night is over, which is usually because the wearer
+          // woke up before the alarm. Leaving it armed would ring at them once they are up.
+          // Done here rather than in the screen so every way of stopping the tracker agrees,
+          // and it is harmless on the path where the alarm rang and was already turned off.
+          DisableWakeAlarm();
         } else {
           // ClearDataCSV(TRACKER_DATA_FILE_NAME);
           prevSessionData.totalSleepMinutes = 0;
