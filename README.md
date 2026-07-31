@@ -81,6 +81,8 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 3a7fd504 fix(infinisleep): make the Auto button set the wake up time and nothing else
 - ae0fc430 feat(settings): add a heart rate polling interval to the settings menu
 - 67d2cbdf feat(activity): measure heart rate on a timer outside sleep sessions
+- 9a571a29 fix(infinisleep): disable the wake alarm when the tracker is stopped
+- 574002b3 chore: drop the Metronome app
 
 Plus the commits that write this list, which cannot list their own hash.
 
