@@ -38,6 +38,11 @@ void HeartRateSettleTimerCallback(TimerHandle_t xTimer) {
   sysTask->PushMessage(Pinetime::System::Messages::SleepTrackerHeartRateReady);
 }
 
+void HeartRatePollTimerCallback(TimerHandle_t xTimer) {
+  auto* sysTask = static_cast<SystemTask*>(pvTimerGetTimerID(xTimer));
+  sysTask->PushMessage(Pinetime::System::Messages::HeartRatePollTimerExpired);
+}
+
 SystemTask::SystemTask(Drivers::SpiMaster& spi,
                        Pinetime::Drivers::SpiNorFlash& spiNorFlash,
                        Drivers::TwiMaster& twiMaster,
@@ -196,6 +201,12 @@ void SystemTask::Work() {
   xTimerStart(measureBatteryTimer, portMAX_DELAY);
 
   heartRateSettleTimer = xTimerCreate("hrSettle", heartRateSettlePeriod, pdFALSE, this, HeartRateSettleTimerCallback);
+
+  // Created dormant with a placeholder period, since the setting decides both whether it runs at
+  // all and how often. ApplyHeartRatePollInterval does that, here and whenever the watch is put
+  // down after the setting may have been changed.
+  heartRatePollTimer = xTimerCreate("hrPoll", pdMS_TO_TICKS(60 * 1000), pdTRUE, this, HeartRatePollTimerCallback);
+  ApplyHeartRatePollInterval();
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -410,11 +421,14 @@ void SystemTask::Work() {
           // Reapplied every epoch rather than once when tracking starts, because the battery
           // crosses the threshold during the night, not before it.
           infiniSleepController.SetTrackerPeriodMinutes(EffectiveTrackerIntervalMinutes());
-          BeginActivityEpoch();
+          BeginActivityEpoch(Controllers::ActivityKind::Asleep, infiniSleepController.GetInfiniSleepSettings().heartRateTracking);
           displayApp.PushMessage(Pinetime::Applications::Display::Messages::SleepTrackerUpdate);
           break;
         case Messages::SleepTrackerHeartRateReady:
           RecordActivityEpoch();
+          break;
+        case Messages::HeartRatePollTimerExpired:
+          PollHeartRate();
           break;
         default:
           break;
@@ -483,6 +497,10 @@ void SystemTask::GoToSleep() {
     displayApp.PushMessage(Pinetime::Applications::Display::Messages::GoToSleep);
   }
   heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::GoToSleep);
+
+  // The settings screen can only have been used with the screen on, so this is the first moment
+  // a change to the interval can matter, and the last one before the polling actually happens.
+  ApplyHeartRatePollInterval();
 
   state = SystemTaskState::GoingToSleep;
 };
@@ -574,7 +592,7 @@ TickType_t SystemTask::MotionPollPeriod() const {
   return pdMS_TO_TICKS(EffectiveMotionSampleIntervalDs() * 100);
 }
 
-void SystemTask::BeginActivityEpoch() {
+void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate) {
   if (activityEpochMeasuring) {
     // The previous epoch is still waiting on the sensor. Skipping is better than stacking:
     // it can only happen if the settle window is longer than the epoch, and the reading in
@@ -582,7 +600,8 @@ void SystemTask::BeginActivityEpoch() {
     return;
   }
 
-  const auto settings = infiniSleepController.GetInfiniSleepSettings();
+  activityEpochKind = kind;
+  activityEpochWantsHeartRate = wantsHeartRate;
 
   // While the watch is awake the heart rate task belongs to whatever the user is doing with
   // it, so it is read but never driven. While the watch is asleep the task has been stopped
@@ -590,7 +609,7 @@ void SystemTask::BeginActivityEpoch() {
   // safe, and also the only case where it would otherwise report nothing all night.
   // No timer means no way to wait for the sensor, so record what is already known rather than
   // handing FreeRTOS a null handle.
-  const bool shouldMeasure = settings.heartRateTracking && state == SystemTaskState::Sleeping && heartRateSettleTimer != nullptr;
+  const bool shouldMeasure = wantsHeartRate && state == SystemTaskState::Sleeping && heartRateSettleTimer != nullptr;
 
   if (!shouldMeasure) {
     RecordActivityEpoch();
@@ -604,21 +623,64 @@ void SystemTask::BeginActivityEpoch() {
   xTimerStart(heartRateSettleTimer, 0);
 }
 
+void SystemTask::ApplyHeartRatePollInterval() {
+  if (heartRatePollTimer == nullptr) {
+    return;
+  }
+
+  const uint8_t minutes = settingsController.GetHeartRatePollInterval();
+  // Only on a change, because rearming restarts the countdown: applied on every screen off, a
+  // watch looked at often would never reach the end of a thirty minute interval.
+  if (minutes == heartRatePollPeriodMinutes) {
+    return;
+  }
+  heartRatePollPeriodMinutes = minutes;
+
+  if (minutes == 0) {
+    NRF_LOG_INFO("[systemtask] Background heart rate measurement off");
+    xTimerStop(heartRatePollTimer, 0);
+    return;
+  }
+
+  NRF_LOG_INFO("[systemtask] Measuring heart rate every %u minutes", minutes);
+  // Ticks per minute times the count, rather than pdMS_TO_TICKS of the whole thing: that macro
+  // multiplies by the tick rate in 32 bits, which an hour expressed in milliseconds comes
+  // uncomfortably close to overflowing.
+  // Changing the period of a dormant timer also starts it, which is what is wanted here.
+  xTimerChangePeriod(heartRatePollTimer, pdMS_TO_TICKS(60 * 1000) * minutes, 0);
+}
+
+void SystemTask::PollHeartRate() {
+  // The sleep tracker records epochs on its own schedule and drives the same sensor. Letting
+  // both run would have them fighting over it, and the night is the more important of the two.
+  if (infiniSleepController.IsTrackerEnabled()) {
+    return;
+  }
+
+  // Only with the screen off. Awake, the sensor belongs to whoever opened the heart rate app,
+  // and a measurement started behind their back would either be stopped by theirs or stop it.
+  // Skipping costs one sample: the timer is periodic and the next one is along shortly.
+  if (state != SystemTaskState::Sleeping) {
+    return;
+  }
+
+  BeginActivityEpoch(Controllers::ActivityKind::Unknown, true);
+}
+
 void SystemTask::RecordActivityEpoch() {
   Pinetime::Controllers::ActivityRecord record;
 
   record.timestamp =
     std::chrono::duration_cast<std::chrono::seconds>(dateTimeController.UTCDateTime().time_since_epoch()).count();
 
-  // Everything recorded while the tracker is running is reported as asleep. The watch has no
-  // basis for a finer claim: actigraphy and an occasional heart rate cannot separate sleep
+  // Asleep for a tracker epoch, since the wearer said so by starting a session. The watch has
+  // no basis for a finer claim: actigraphy and an occasional heart rate cannot separate sleep
   // stages, and guessing awake from asleep within a session would be a guess presented as a
-  // measurement.
-  record.kind = Pinetime::Controllers::ActivityKind::Asleep;
+  // measurement. A background poll carries Unknown for the same reason, in the other
+  // direction: nobody told the watch what the wearer is doing and it cannot tell.
+  record.kind = activityEpochKind;
 
-  const auto settings = infiniSleepController.GetInfiniSleepSettings();
-
-  if (settings.heartRateTracking) {
+  if (activityEpochWantsHeartRate) {
     // The state matters as much as the value. HeartRateController holds its last reading
     // indefinitely, so without this an epoch where the sensor never converged would be
     // recorded with a heart rate from hours earlier, indistinguishable from a real one.
@@ -635,7 +697,14 @@ void SystemTask::RecordActivityEpoch() {
     record.motion = motion;
   }
 
-  activityLogController.Add(record);
+  // A background poll where nothing converged is not worth a record: it would carry a timestamp
+  // and two "not measured" fields, and take a slot in the ring from a reading that has something
+  // in it. Tracker epochs are kept either way, since their timestamps map out the session.
+  const bool measuredSomething = record.heartRate != Pinetime::Controllers::ActivityRecord::heartRateNotMeasured ||
+                                 record.motion != Pinetime::Controllers::ActivityRecord::motionNotMeasured;
+  if (activityEpochKind != Controllers::ActivityKind::Unknown || measuredSomething) {
+    activityLogController.Add(record);
+  }
 
   if (activityEpochOwnsHeartRate) {
     // Only hand the sensor back if the watch is still asleep. The user may have picked it up

@@ -166,9 +166,10 @@ namespace Pinetime {
       uint8_t EffectiveTrackerIntervalMinutes() const;
       uint8_t EffectiveMotionSampleIntervalDs() const;
 
-      /// Begins one tracker epoch: turns the heart rate sensor on if it is wanted, otherwise
-      /// records straight away.
-      void BeginActivityEpoch();
+      /// Begins one epoch: turns the heart rate sensor on if it is wanted, otherwise records
+      /// straight away. The kind is what the record will claim the wearer was doing, and is the
+      /// caller's to decide, since the sleep tracker knows something a background poll does not.
+      void BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate);
       /// Closes one tracker epoch into the activity log, and turns the sensor back off.
       void RecordActivityEpoch();
       /// True while an epoch is waiting on the heart rate sensor, so a second tracker tick
@@ -177,6 +178,22 @@ namespace Pinetime {
       /// True when this class turned the sensor on and therefore owes it a turn off. Never set
       /// while the watch is awake, where the user's own measurement must not be interfered with.
       bool activityEpochOwnsHeartRate = false;
+      /// What the epoch in flight will be recorded as, and whether it asked for a heart rate.
+      /// Held here because the epoch is closed by a message from a timer, several hundred
+      /// milliseconds after the caller that started it has returned.
+      Controllers::ActivityKind activityEpochKind = Controllers::ActivityKind::Unknown;
+      bool activityEpochWantsHeartRate = false;
+
+      /// Measures heart rate on its own schedule, outside any sleep session, when the wearer
+      /// asked for it in the settings. Does nothing while the tracker runs or the screen is on.
+      void PollHeartRate();
+      /// Starts, stops or repitches the poll timer to match the setting. Cheap and idempotent:
+      /// it returns immediately unless the interval actually changed.
+      void ApplyHeartRatePollInterval();
+      TimerHandle_t heartRatePollTimer = nullptr;
+      /// The interval currently loaded into that timer, so a change can be told from a repeat.
+      /// Deliberately not initialised to the setting: at boot nothing is armed yet.
+      uint8_t heartRatePollPeriodMinutes = 0;
 
       bool stepCounterMustBeReset = false;
       static constexpr TickType_t batteryMeasurementPeriod = pdMS_TO_TICKS(10 * 60 * 1000);

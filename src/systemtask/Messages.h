@@ -35,6 +35,8 @@ namespace Pinetime {
       SleepTrackerUpdate,
       // The heart rate sensor has had long enough to settle, so the epoch can be recorded.
       SleepTrackerHeartRateReady,
+      // Time for one of the background heart rate measurements the wearer asked for in settings.
+      HeartRatePollTimerExpired,
     };
   }
 }
