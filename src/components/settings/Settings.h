@@ -301,6 +301,20 @@ namespace Pinetime {
         return settings.stepsGoal;
       };
 
+      /// How often the watch measures heart rate on its own while the screen is off, in minutes.
+      /// Zero means never, which is the default: a watch should not turn its sensor on all day
+      /// unless the wearer asked it to.
+      void SetHeartRatePollInterval(uint8_t minutes) {
+        if (minutes != settings.heartRatePollInterval) {
+          settingsChanged = true;
+        }
+        settings.heartRatePollInterval = minutes;
+      };
+
+      uint8_t GetHeartRatePollInterval() const {
+        return settings.heartRatePollInterval;
+      };
+
       void SetBleRadioEnabled(bool enabled) {
         bleRadioEnabled = enabled;
       };
@@ -312,7 +326,9 @@ namespace Pinetime {
     private:
       Pinetime::Controllers::FS& fs;
 
-      static constexpr uint32_t settingsVersion = 0x0009;
+      // Bumped from 0x0009 for heartRatePollInterval. The file is discarded when the version
+      // does not match, so every watch setting goes back to its default once after an update.
+      static constexpr uint32_t settingsVersion = 0x000a;
 
       struct SettingsData {
         uint32_t version = settingsVersion;
@@ -336,6 +352,9 @@ namespace Pinetime {
 
         std::bitset<5> wakeUpMode {0};
         uint16_t shakeWakeThreshold = 150;
+
+        /// Minutes between background heart rate measurements, 0 for off.
+        uint8_t heartRatePollInterval = 0;
 
         Controllers::BrightnessController::Levels brightLevel = Controllers::BrightnessController::Levels::Medium;
       };

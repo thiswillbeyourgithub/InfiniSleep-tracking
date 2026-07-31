@@ -47,6 +47,7 @@ namespace Pinetime {
           {Symbols::check, "Firmware", Apps::FirmwareValidation},
           {Symbols::bluetooth, "Bluetooth", Apps::SettingBluetooth},
 
+          {Symbols::heartBeat, "Heart Rate", Apps::SettingHeartRate},
           {Symbols::list, "About", Apps::SysInfo},
 
           // {Symbols::none, "None", Apps::None},

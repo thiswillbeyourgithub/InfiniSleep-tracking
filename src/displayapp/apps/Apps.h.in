@@ -43,6 +43,7 @@ namespace Pinetime {
       SettingSetDateTime,
       SettingChimes,
       SettingShakeThreshold,
+      SettingHeartRate,
       SettingBluetooth,
       Error
     };
