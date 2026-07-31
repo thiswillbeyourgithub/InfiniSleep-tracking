@@ -20,6 +20,7 @@ It builds on two upstream efforts, neither of which is merged:
 - A ring of 341 records (timestamp, motion, heart rate, kind), stored packed at 6 bytes each and mirrored to `/.system/activity.dat` so it survives a reboot. About three and a half nights at a 5 minute epoch.
 - A BLE service, `00060000-78fc-48fe-8e23-433b3a1942d0`, that hands the records over in batches and only reclaims the space once the host says it stored them.
 - Both sampling rates as settings, on a new Sensors page in the Sleep app.
+- Heart rate measured on a timer outside any sleep session, every 5, 15, 30 or 60 minutes, set from a new entry in the settings menu and off by default. It stands down while the sleep tracker runs and only measures with the screen off, so it never takes the sensor from the heart rate app.
 - A backoff below 25 percent battery: the epoch floors at 30 minutes and the accelerometer poll at 1 second, so the tracker does not flatten the battery before morning, and the log is written to flash on the way past that threshold so a battery that dies at 4am does not take the night with it.
 
 The BLE service is deliberately kept independent of how sleep is tracked, so it could be reviewed on its own.
@@ -78,6 +79,8 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 971d979b chore: drop four games for flash, and ignore the local build helpers
 - e31ae1b4 feat(infinisleep): put the sensor settings on top of the sleep pages
 - 3a7fd504 fix(infinisleep): make the Auto button set the wake up time and nothing else
+- ae0fc430 feat(settings): add a heart rate polling interval to the settings menu
+- 67d2cbdf feat(activity): measure heart rate on a timer outside sleep sessions
 
 Plus the commits that write this list, which cannot list their own hash.
 
