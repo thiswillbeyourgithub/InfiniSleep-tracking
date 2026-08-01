@@ -6,6 +6,7 @@
 #include "displayapp/widgets/Counter.h"
 #include "displayapp/widgets/PageIndicator.h"
 #include "displayapp/Controllers.h"
+#include "components/activity/ActivityLogController.h"
 #include "systemtask/SystemTask.h"
 #include "systemtask/WakeLock.h"
 #include "Symbols.h"
@@ -16,6 +17,7 @@ namespace Pinetime {
       class Sleep : public Screen {
       public:
         explicit Sleep(Controllers::InfiniSleepController& infiniSleepController,
+                       Controllers::ActivityLogController& activityLogController,
                        Controllers::Settings::ClockType clockType,
                        System::SystemTask& systemTask,
                        Controllers::MotorController& motorController,
@@ -41,6 +43,9 @@ namespace Pinetime {
         SleepDisplayState displayState = SleepDisplayState::Alarm;
 
         Controllers::InfiniSleepController& infiniSleepController;
+        /// Only read, and only to show how many records are waiting for a companion app. The
+        /// screen has no business changing the log, which belongs to whatever is tracking.
+        const Controllers::ActivityLogController& activityLogController;
 
         bool ignoreButtonPush = false;
 
@@ -95,6 +100,7 @@ namespace Pinetime {
         lv_obj_t* label_gradual_wake;
         lv_obj_t* label_total_sleep;
         lv_obj_t* label_sleep_cycles;
+        lv_obj_t* label_record_count;
         lv_obj_t *btnSuggestedAlarm, *txtSuggestedAlarm, *iconSuggestedAlarm;
 
         lv_obj_t *btnWakeMode, *btnCycles, *btnTestMotorGradual, *lblMotorStrength, *btnMotorStrength, *btnPushesToStop;
@@ -115,6 +121,7 @@ namespace Pinetime {
 
       static Screens::Screen* Create(AppControllers& controllers) {
         return new Screens::Sleep(controllers.infiniSleepController,
+                                  controllers.activityLogController,
                                   controllers.settingsController.GetClockType(),
                                   *controllers.systemTask,
                                   controllers.motorController,

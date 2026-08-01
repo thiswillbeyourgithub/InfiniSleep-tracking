@@ -70,11 +70,13 @@ namespace {
 }
 
 Sleep::Sleep(Controllers::InfiniSleepController& infiniSleepController,
+             Controllers::ActivityLogController& activityLogController,
              Controllers::Settings::ClockType clockType,
              System::SystemTask& systemTask,
              Controllers::MotorController& motorController,
              DisplayApp& displayApp)
   : infiniSleepController {infiniSleepController},
+    activityLogController {activityLogController},
     wakeLock(systemTask),
     motorController {motorController},
     clockType {clockType},
@@ -304,6 +306,21 @@ void Sleep::DrawInfoScreen() {
   }
   lv_obj_align(lblTime, lv_scr_act(), LV_ALIGN_IN_TOP_MID, 0, 5);
   lv_obj_set_style_local_text_color(lblTime, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, LV_COLOR_WHITE);
+
+  // How much is in the activity log, which is the only place on the watch that says whether
+  // anything was actually recorded. A night that ends with this at zero was never measured, so
+  // there is nothing for a companion app to have missed; one that ends with it at the capacity
+  // has been overwriting its own oldest records and needs collecting more often.
+  label_record_count = lv_label_create(lv_scr_act(), nullptr);
+  lv_label_set_text_fmt(label_record_count,
+                        "Points: %d/%d",
+                        activityLogController.RecordCount(),
+                        Controllers::ActivityLogController::capacity);
+  lv_obj_align(label_record_count, lv_scr_act(), LV_ALIGN_IN_TOP_MID, 0, 30);
+  lv_obj_set_style_local_text_color(label_record_count,
+                                    LV_LABEL_PART_MAIN,
+                                    LV_STATE_DEFAULT,
+                                    infiniSleepController.IsEnabled() ? LV_COLOR_RED : LV_COLOR_WHITE);
 
   // Total sleep time
   label_total_sleep = lv_label_create(lv_scr_act(), nullptr);

@@ -131,7 +131,8 @@ Pinetime::Applications::DisplayApp displayApp(lcd,
                                               touchHandler,
                                               fs,
                                               spiNorFlash,
-                                              infiniSleepController);
+                                              infiniSleepController,
+                                              activityLogController);
 
 Pinetime::System::SystemTask systemTask(spi,
                                         spiNorFlash,
