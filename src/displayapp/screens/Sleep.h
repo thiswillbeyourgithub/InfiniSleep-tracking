@@ -18,6 +18,7 @@ namespace Pinetime {
       public:
         explicit Sleep(Controllers::InfiniSleepController& infiniSleepController,
                        Controllers::ActivityLogController& activityLogController,
+                       Controllers::DateTime& dateTimeController,
                        Controllers::Settings::ClockType clockType,
                        System::SystemTask& systemTask,
                        Controllers::MotorController& motorController,
@@ -33,12 +34,12 @@ namespace Pinetime {
         void StopAlerting(bool setSwitch = true);
         void SnoozeWakeAlarm();
         void UpdateDisplay();
-        // Pages from top to bottom: the sensor settings, then the alarm settings, then the wake up
-        // time setter, then the tracking page. Swiping down walks up that list, swiping up walks
-        // down it. Alarm is the page the app starts on, since it is the one there is a reason to
-        // open the app for.
-        enum class SleepDisplayState { Sensors, Settings, Alarm, Info };
-        static constexpr SleepDisplayState firstPage = SleepDisplayState::Sensors;
+        // Pages from top to bottom: what is in the activity log, then the sensor settings, then
+        // the alarm settings, then the wake up time setter, then the tracking page. Swiping down
+        // walks up that list, swiping up walks down it. Alarm is the page the app starts on,
+        // since it is the one there is a reason to open the app for.
+        enum class SleepDisplayState { Log, Sensors, Settings, Alarm, Info };
+        static constexpr SleepDisplayState firstPage = SleepDisplayState::Log;
         static constexpr SleepDisplayState lastPage = SleepDisplayState::Info;
         SleepDisplayState displayState = SleepDisplayState::Alarm;
 
@@ -46,6 +47,9 @@ namespace Pinetime {
         /// Only read, and only to show how many records are waiting for a companion app. The
         /// screen has no business changing the log, which belongs to whatever is tracking.
         const Controllers::ActivityLogController& activityLogController;
+        /// For the age of the records held, which is in UTC seconds like everything in the log.
+        /// Not const only because reading the time is not a const operation on that controller.
+        Controllers::DateTime& dateTimeController;
 
         bool ignoreButtonPush = false;
 
@@ -81,6 +85,12 @@ namespace Pinetime {
         void DrawSettingsScreen();
         /// What is recorded overnight and how often, as opposed to how the alarm behaves.
         void DrawSensorsScreen();
+        /// What the activity log is holding and whether anything is collecting it. Read only:
+        /// the watch cannot make the phone sync, only show what there would be to sync.
+        void DrawLogScreen();
+        /// One "name  value" row of the log page. Returns the value label, empty and set to
+        /// realign itself, so the caller can write into it and have it stay against the edge.
+        lv_obj_t* CreateLogRow(const char* name, int16_t yOffset);
         /// One "Name  [value]" row of a settings page. Returns the button, whose only child is
         /// the value label, so that OnButtonEvent can update it through lv_obj_get_child.
         lv_obj_t* CreateSettingRow(const char* name, int16_t yOffset);
@@ -107,10 +117,11 @@ namespace Pinetime {
 
         lv_obj_t *btnHeartRateTracking, *btnBodyTracking, *btnTrackerInterval, *btnMotionInterval;
 
-        Widgets::PageIndicator pageIndicatorSensors = Widgets::PageIndicator(0, 4);
-        Widgets::PageIndicator pageIndicatorSettings = Widgets::PageIndicator(1, 4);
-        Widgets::PageIndicator pageIndicatorAlarm = Widgets::PageIndicator(2, 4);
-        Widgets::PageIndicator pageIndicatorInfo = Widgets::PageIndicator(3, 4);
+        Widgets::PageIndicator pageIndicatorLog = Widgets::PageIndicator(0, 5);
+        Widgets::PageIndicator pageIndicatorSensors = Widgets::PageIndicator(1, 5);
+        Widgets::PageIndicator pageIndicatorSettings = Widgets::PageIndicator(2, 5);
+        Widgets::PageIndicator pageIndicatorAlarm = Widgets::PageIndicator(3, 5);
+        Widgets::PageIndicator pageIndicatorInfo = Widgets::PageIndicator(4, 5);
       };
     }
 
@@ -122,6 +133,7 @@ namespace Pinetime {
       static Screens::Screen* Create(AppControllers& controllers) {
         return new Screens::Sleep(controllers.infiniSleepController,
                                   controllers.activityLogController,
+                                  controllers.dateTimeController,
                                   controllers.settingsController.GetClockType(),
                                   *controllers.systemTask,
                                   controllers.motorController,

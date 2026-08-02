@@ -134,6 +134,23 @@ int main() {
   }
 
   {
+    printf("a release is remembered, so the watch can say whether a host is collecting\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    CHECK(!log.HasBeenCollected());
+    log.Add(Rec(t0));
+    CHECK(!log.HasBeenCollected());
+
+    // Stamped even when the release frees nothing, since a host with nothing left to acknowledge
+    // is still a host that is collecting.
+    log.Release(t0 - 300);
+    CHECK(log.HasBeenCollected());
+    CHECK(log.RecordCount() == 1);
+  }
+
+  {
     printf("a gap longer than the delta can hold rebases instead of losing the night\n");
     FS fs;
     ActivityLogController log(fs);

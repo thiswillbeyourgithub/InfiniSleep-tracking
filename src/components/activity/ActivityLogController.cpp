@@ -204,6 +204,11 @@ void ActivityLogController::Release(uint32_t upToTimestamp) {
 
   NRF_LOG_INFO("[ActivityLog] Released %u records up to %u, %u left", released, upToTimestamp, count);
 
+  // Stamped even when nothing was released, because the question this answers is whether a host
+  // is collecting at all, and a host with nothing left to acknowledge is collecting.
+  collected = true;
+  collectedAtTicks = xTaskGetTickCount();
+
   if (released > 0) {
     // Marked rather than written: Release arrives on the BLE host task, and a host may well
     // sync while the watch is asleep and the flash is powered down. Losing the acknowledgement

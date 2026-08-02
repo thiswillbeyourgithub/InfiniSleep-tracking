@@ -5,6 +5,7 @@
 #include "components/settings/Settings.h"
 #include "components/infinisleep/InfiniSleepController.h"
 #include "components/motor/MotorController.h"
+#include "components/datetime/DateTimeController.h"
 #include "systemtask/SystemTask.h"
 
 #include <libraries/log/nrf_log.h>
@@ -14,6 +15,26 @@
 using namespace Pinetime::Applications::Screens;
 
 namespace {
+  /// How long ago something happened, in one unit. Nothing on the log page is read for a precise
+  /// figure: the questions are "is the watch still recording" and "has the phone been by
+  /// lately", and a single unit answers both without needing a row wide enough for two.
+  struct Age {
+    int value;
+    char unit;
+  };
+
+  Age AgeFromSeconds(uint32_t seconds) {
+    constexpr uint32_t hour = 60 * 60;
+    constexpr uint32_t day = 24 * hour;
+    if (seconds < hour) {
+      return {static_cast<int>(seconds / 60), 'm'};
+    }
+    if (seconds < 2 * day) {
+      return {static_cast<int>(seconds / hour), 'h'};
+    }
+    return {static_cast<int>(seconds / day), 'd'};
+  }
+
   void ValueChangedHandler(void* userData) {
     auto* screen = static_cast<Sleep*>(userData);
     screen->OnValueChanged();
@@ -71,12 +92,14 @@ namespace {
 
 Sleep::Sleep(Controllers::InfiniSleepController& infiniSleepController,
              Controllers::ActivityLogController& activityLogController,
+             Controllers::DateTime& dateTimeController,
              Controllers::Settings::ClockType clockType,
              System::SystemTask& systemTask,
              Controllers::MotorController& motorController,
              DisplayApp& displayApp)
   : infiniSleepController {infiniSleepController},
     activityLogController {activityLogController},
+    dateTimeController {dateTimeController},
     wakeLock(systemTask),
     motorController {motorController},
     clockType {clockType},
@@ -172,6 +195,10 @@ void Sleep::UpdateDisplay() {
     case SleepDisplayState::Sensors:
       DrawSensorsScreen();
       pageIndicatorSensors.Create();
+      break;
+    case SleepDisplayState::Log:
+      DrawLogScreen();
+      pageIndicatorLog.Create();
       break;
   }
   drawnState = displayState;
@@ -526,6 +553,73 @@ void Sleep::DrawSensorsScreen() {
   btnMotionInterval = CreateSettingRow("Motion\nEvery", y_offset);
   const uint8_t motionDs = infiniSleepController.GetMotionSampleIntervalDs();
   lv_label_set_text_fmt(lv_obj_get_child(btnMotionInterval, nullptr), "%d.%ds", motionDs / 10, motionDs % 10);
+}
+
+lv_obj_t* Sleep::CreateLogRow(const char* name, int16_t yOffset) {
+  lv_obj_t* label = lv_label_create(lv_scr_act(), nullptr);
+  lv_label_set_text_static(label, name);
+  lv_obj_align(label, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, yOffset);
+
+  lv_obj_t* value = lv_label_create(lv_scr_act(), nullptr);
+  // Emptied before aligning, since a fresh label carries placeholder text whose width would
+  // decide where the right edge lands. The caller's text is a different width again, which is
+  // what the realign is for.
+  lv_label_set_text_static(value, "");
+  lv_obj_align(value, lv_scr_act(), LV_ALIGN_IN_TOP_RIGHT, -10, yOffset);
+  lv_obj_set_auto_realign(value, true);
+  return value;
+}
+
+void Sleep::DrawLogScreen() {
+  lv_obj_t* title = lv_label_create(lv_scr_act(), nullptr);
+  lv_label_set_text_static(title, "Activity log");
+  lv_obj_align(title, lv_scr_act(), LV_ALIGN_IN_TOP_MID, 0, 8);
+  lv_obj_set_style_local_text_color(title, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
+
+  // The count is exactly what is waiting to be collected: a record is dropped from the ring only
+  // when a companion application has said it stored it, so nothing here is a copy of something
+  // the phone already has.
+  lv_obj_t* waiting = CreateLogRow("Waiting", 48);
+  lv_label_set_text_fmt(waiting, "%d/%d", activityLogController.RecordCount(), Controllers::ActivityLogController::capacity);
+
+  const uint32_t now =
+    std::chrono::duration_cast<std::chrono::seconds>(dateTimeController.UTCDateTime().time_since_epoch()).count();
+  const uint32_t newest = activityLogController.NewestTimestamp();
+  const uint32_t oldest = activityLogController.OldestTimestamp();
+
+  // Guarded rather than trusted: a record stamped in the future, which a clock correction can
+  // produce, would otherwise underflow into an age of decades.
+  lv_obj_t* newestRow = CreateLogRow("Newest", 78);
+  if (newest == 0 || now < newest) {
+    lv_label_set_text_static(newestRow, "none");
+  } else {
+    const Age age = AgeFromSeconds(now - newest);
+    lv_label_set_text_fmt(newestRow, "%d%c ago", age.value, age.unit);
+  }
+
+  lv_obj_t* oldestRow = CreateLogRow("Oldest", 108);
+  if (oldest == 0 || now < oldest) {
+    lv_label_set_text_static(oldestRow, "none");
+  } else {
+    const Age age = AgeFromSeconds(now - oldest);
+    lv_label_set_text_fmt(oldestRow, "%d%c ago", age.value, age.unit);
+  }
+
+  lv_obj_t* collected = CreateLogRow("Synced", 138);
+  if (!activityLogController.HasBeenCollected()) {
+    lv_label_set_text_static(collected, "never");
+  } else {
+    const Age age = AgeFromSeconds(activityLogController.TicksSinceCollection() / configTICK_RATE_HZ);
+    lv_label_set_text_fmt(collected, "%d%c ago", age.value, age.unit);
+  }
+
+  // Said out loud because the page invites the question it cannot answer. The watch has no way
+  // to start a sync: the phone asks for records when it connects, and the watch can only have
+  // them ready.
+  lv_obj_t* footer = lv_label_create(lv_scr_act(), nullptr);
+  lv_label_set_text_static(footer, "Phone collects\nwhen it connects");
+  lv_obj_set_style_local_text_color(footer, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
+  lv_obj_align(footer, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, 175);
 }
 
 void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {

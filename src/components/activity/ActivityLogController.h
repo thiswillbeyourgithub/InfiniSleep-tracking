@@ -4,6 +4,7 @@
 
 #include <FreeRTOS.h>
 #include <semphr.h>
+#include <task.h>
 
 #include "components/activity/ActivityLog.h"
 #include "components/fs/FS.h"
@@ -72,6 +73,19 @@ namespace Pinetime {
         return dirty;
       }
 
+      /// True once a host has acknowledged records since boot, so "nothing has been collected"
+      /// can be told from "everything was collected and this is what came after".
+      bool HasBeenCollected() const {
+        return collected;
+      }
+
+      /// Ticks since that acknowledgement, meaningless unless HasBeenCollected(). Measured on
+      /// the tick counter rather than the clock because the question it answers is how long ago,
+      /// and the clock can be corrected by the very host being waited on.
+      uint32_t TicksSinceCollection() const {
+        return xTaskGetTickCount() - collectedAtTicks;
+      }
+
       uint16_t RecordCount() const override;
       uint32_t OldestTimestamp() const override;
       uint32_t NewestTimestamp() const override;
@@ -131,6 +145,12 @@ namespace Pinetime {
       uint16_t count = 0;
       /// Set by anything that changes the ring, cleared by a successful Flush().
       bool dirty = false;
+
+      /// When a host last said it had stored what it was given. Deliberately not saved with the
+      /// records: after a reboot the watch has no idea how much time passed, and reporting a
+      /// stale figure as if it were current is worse than reporting nothing.
+      bool collected = false;
+      uint32_t collectedAtTicks = 0;
 
       /// Guards the three members above. Add() runs on the task driving the tracker while
       /// ReadRecords() runs on the BLE host task, and a torn read here would be stored by the
