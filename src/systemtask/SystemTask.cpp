@@ -476,6 +476,10 @@ void SystemTask::GoToRunning() {
   displayApp.PushMessage(Pinetime::Applications::Display::Messages::GoToRunning);
   heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::WakeUp);
 
+  // The screen is on, so any measurement from here is one the wearer started and can see. Those
+  // are the readings the heart rate characteristic exists to publish, so it is turned back on.
+  heartRateController.SetBleNotificationsEnabled(true);
+
   if (bleController.IsRadioEnabled() && !bleController.IsConnected()) {
     nimbleController.RestartFastAdv();
   }
@@ -497,6 +501,14 @@ void SystemTask::GoToSleep() {
     displayApp.PushMessage(Pinetime::Applications::Display::Messages::GoToSleep);
   }
   heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::GoToSleep);
+
+  // From here the only measurements are the ones this class starts for the activity log, at an
+  // epoch or a background poll. Notifying them would hand a subscriber a burst of readings a
+  // second apart every time the watch polls, which Gadgetbridge stores one row each, as activity
+  // rather than as sleep, in the middle of a night it is charting. They go into the log instead,
+  // which is where a timestamp and a kind can be attached to them. Cleared here rather than
+  // around each epoch so that the reading the sensor produces on its way down is covered too.
+  heartRateController.SetBleNotificationsEnabled(false);
 
   // The settings screen can only have been used with the screen on, so this is the first moment
   // a change to the interval can matter, and the last one before the polling actually happens.

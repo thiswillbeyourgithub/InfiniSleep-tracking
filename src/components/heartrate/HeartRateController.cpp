@@ -8,7 +8,9 @@ void HeartRateController::Update(HeartRateController::States newState, uint8_t h
   this->state = newState;
   if (this->heartRate != heartRate) {
     this->heartRate = heartRate;
-    service->OnNewHeartRateValue(heartRate);
+    if (bleNotificationsEnabled) {
+      service->OnNewHeartRateValue(heartRate);
+    }
   }
 }
 
