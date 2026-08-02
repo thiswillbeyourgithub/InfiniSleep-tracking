@@ -140,8 +140,15 @@ int main() {
     log.Init();
 
     CHECK(!log.HasBeenCollected());
+    CHECK(!log.HasBeenRead());
     log.Add(Rec(t0));
     CHECK(!log.HasBeenCollected());
+
+    // Reading is stamped even when there is nothing to hand back, since what it records is that
+    // the request arrived.
+    ActivityRecord out[4];
+    CHECK(log.ReadRecords(t0, out, 4) == 0);
+    CHECK(log.HasBeenRead());
 
     // Stamped even when the release frees nothing, since a host with nothing left to acknowledge
     // is still a host that is collecting.

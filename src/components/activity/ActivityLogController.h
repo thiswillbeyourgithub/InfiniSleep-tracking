@@ -73,6 +73,19 @@ namespace Pinetime {
         return dirty;
       }
 
+      /// True once a host has asked for records since boot, whether or not there were any.
+      ///
+      /// Worth its two words of RAM because it splits a failed sync in half from the watch's own
+      /// screen: a host that never asked is a discovery or a write that is not arriving, and one
+      /// that asked but never acknowledged is an answer that is not getting back.
+      bool HasBeenRead() const {
+        return read;
+      }
+
+      uint32_t TicksSinceRead() const {
+        return xTaskGetTickCount() - readAtTicks;
+      }
+
       /// True once a host has acknowledged records since boot, so "nothing has been collected"
       /// can be told from "everything was collected and this is what came after".
       bool HasBeenCollected() const {
@@ -151,6 +164,11 @@ namespace Pinetime {
       /// stale figure as if it were current is worse than reporting nothing.
       bool collected = false;
       uint32_t collectedAtTicks = 0;
+
+      /// When a host last asked for records. Mutable because being read is not a change to the
+      /// log, and ReadRecords() is const for the good reason that it hands out copies.
+      mutable bool read = false;
+      mutable uint32_t readAtTicks = 0;
 
       /// Guards the three members above. Add() runs on the task driving the tracker while
       /// ReadRecords() runs on the BLE host task, and a torn read here would be stored by the

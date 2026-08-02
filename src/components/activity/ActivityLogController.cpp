@@ -180,6 +180,11 @@ uint8_t ActivityLogController::ReadRecords(uint32_t sinceTimestamp, ActivityReco
 
   Lock();
 
+  // Stamped before the loop rather than after, and whatever the result, because the question it
+  // answers is whether the request arrived at all, which an empty log does not change.
+  read = true;
+  readAtTicks = xTaskGetTickCount();
+
   uint8_t written = 0;
   for (uint16_t offset = 0; offset < count && written < maxRecords; offset++) {
     if (TimestampAt(offset) > sinceTimestamp) {

@@ -579,7 +579,7 @@ void Sleep::DrawLogScreen() {
   // The count is exactly what is waiting to be collected: a record is dropped from the ring only
   // when a companion application has said it stored it, so nothing here is a copy of something
   // the phone already has.
-  lv_obj_t* waiting = CreateLogRow("Waiting", 48);
+  lv_obj_t* waiting = CreateLogRow("Waiting", 44);
   lv_label_set_text_fmt(waiting, "%d/%d", activityLogController.RecordCount(), Controllers::ActivityLogController::capacity);
 
   const uint32_t now =
@@ -589,7 +589,7 @@ void Sleep::DrawLogScreen() {
 
   // Guarded rather than trusted: a record stamped in the future, which a clock correction can
   // produce, would otherwise underflow into an age of decades.
-  lv_obj_t* newestRow = CreateLogRow("Newest", 78);
+  lv_obj_t* newestRow = CreateLogRow("Newest", 70);
   if (newest == 0 || now < newest) {
     lv_label_set_text_static(newestRow, "none");
   } else {
@@ -597,7 +597,7 @@ void Sleep::DrawLogScreen() {
     lv_label_set_text_fmt(newestRow, "%d%c ago", age.value, age.unit);
   }
 
-  lv_obj_t* oldestRow = CreateLogRow("Oldest", 108);
+  lv_obj_t* oldestRow = CreateLogRow("Oldest", 96);
   if (oldest == 0 || now < oldest) {
     lv_label_set_text_static(oldestRow, "none");
   } else {
@@ -605,7 +605,18 @@ void Sleep::DrawLogScreen() {
     lv_label_set_text_fmt(oldestRow, "%d%c ago", age.value, age.unit);
   }
 
-  lv_obj_t* collected = CreateLogRow("Synced", 138);
+  // The two halves of a sync, kept apart on purpose. "Asked" is the phone's request arriving,
+  // "Synced" is its acknowledgement coming back. Asked never means nothing is reaching the watch;
+  // asked recently with synced never means the watch is answering into the void.
+  lv_obj_t* asked = CreateLogRow("Asked", 122);
+  if (!activityLogController.HasBeenRead()) {
+    lv_label_set_text_static(asked, "never");
+  } else {
+    const Age age = AgeFromSeconds(activityLogController.TicksSinceRead() / configTICK_RATE_HZ);
+    lv_label_set_text_fmt(asked, "%d%c ago", age.value, age.unit);
+  }
+
+  lv_obj_t* collected = CreateLogRow("Synced", 148);
   if (!activityLogController.HasBeenCollected()) {
     lv_label_set_text_static(collected, "never");
   } else {
@@ -619,7 +630,7 @@ void Sleep::DrawLogScreen() {
   lv_obj_t* footer = lv_label_create(lv_scr_act(), nullptr);
   lv_label_set_text_static(footer, "Phone collects\nwhen it connects");
   lv_obj_set_style_local_text_color(footer, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
-  lv_obj_align(footer, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, 175);
+  lv_obj_align(footer, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, 182);
 }
 
 void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
