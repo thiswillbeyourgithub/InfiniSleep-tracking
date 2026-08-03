@@ -134,6 +134,58 @@ int main() {
   }
 
   {
+    printf("dropping trims from the back only, and leaves the ring usable\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    for (uint16_t i = 0; i < 10; i++) {
+      log.Add(Rec(t0 + i * 300));
+    }
+    log.DropSince(t0 + 7 * 300);
+    CHECK(log.RecordCount() == 7);
+    CHECK(log.OldestTimestamp() == t0);
+    CHECK(log.NewestTimestamp() == t0 + 6 * 300);
+
+    // A timestamp older than everything held empties it, which is the session that is taken
+    // back in full.
+    log.DropSince(t0);
+    CHECK(log.RecordCount() == 0);
+
+    log.Add(Rec(t0 + 100 * 300));
+    CHECK(log.RecordCount() == 1);
+    CHECK(log.NewestTimestamp() == t0 + 100 * 300);
+
+    // A timestamp newer than everything held drops nothing.
+    log.DropSince(t0 + 200 * 300);
+    CHECK(log.RecordCount() == 1);
+  }
+
+  {
+    printf("dropping across a wrap keeps the records that are kept readable\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    // Fill past capacity so head is well away from zero and the ring has wrapped.
+    for (uint16_t i = 0; i < ActivityLogController::capacity + 20; i++) {
+      log.Add(Rec(t0 + i * 300, static_cast<uint8_t>(50 + i % 50)));
+    }
+    const uint32_t cut = log.NewestTimestamp() - 5 * 300;
+    log.DropSince(cut);
+    CHECK(log.RecordCount() == ActivityLogController::capacity - 6);
+    CHECK(log.NewestTimestamp() == cut - 300);
+
+    const auto all = ReadAll(log);
+    CHECK(all.size() == static_cast<size_t>(ActivityLogController::capacity - 6));
+    bool ordered = true;
+    for (size_t i = 1; i < all.size(); i++) {
+      ordered = ordered && all[i].timestamp > all[i - 1].timestamp;
+    }
+    CHECK(ordered);
+  }
+
+  {
     printf("a release is remembered, so the watch can say whether a host is collecting\n");
     FS fs;
     ActivityLogController log(fs);

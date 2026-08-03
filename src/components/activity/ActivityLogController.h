@@ -57,6 +57,12 @@ namespace Pinetime {
       /// collection path, which is Release().
       void Clear();
 
+      /// Drops every record at or after a timestamp, so a session can be taken back after the
+      /// fact. Trims from the newest end, which the ring supports as cheaply as Release() trims
+      /// from the oldest, and does nothing to records a host has already been given: they are
+      /// gone from here by then, and a host that has stored them keeps them.
+      void DropSince(uint32_t sinceTimestamp);
+
       /// Writes the log to flash if anything changed since the last time, and does nothing
       /// otherwise.
       ///

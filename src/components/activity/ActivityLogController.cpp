@@ -143,6 +143,23 @@ void ActivityLogController::Clear() {
   Unlock();
 }
 
+void ActivityLogController::DropSince(uint32_t sinceTimestamp) {
+  Lock();
+
+  uint16_t dropped = 0;
+  while (dropped < count && TimestampAt(count - 1 - dropped) >= sinceTimestamp) {
+    dropped++;
+  }
+  count -= dropped;
+
+  if (dropped > 0) {
+    NRF_LOG_INFO("[ActivityLog] Dropped %u records from %u, %u left", dropped, sinceTimestamp, count);
+    dirty = true;
+  }
+
+  Unlock();
+}
+
 void ActivityLogController::Flush() {
   Lock();
   if (dirty) {
