@@ -172,6 +172,14 @@ namespace Pinetime {
       void BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate);
       /// Closes one tracker epoch into the activity log, and turns the sensor back off.
       void RecordActivityEpoch();
+
+      /// Writes one Awake record at the instant a session starts or ends.
+      ///
+      /// Worth two records a night because of how a host reads the log: Gadgetbridge attributes
+      /// the time between two samples to the later one's kind, with no cap on the gap, so the
+      /// first Asleep record of the night otherwise drags everything back to the previous sample
+      /// into sleep. A record on each side bounds the session to what was actually tracked.
+      void RecordSessionBoundary();
       /// The clock as the activity log wants it: UTC seconds since the epoch.
       uint32_t UtcNowSeconds();
 

@@ -435,13 +435,28 @@ void SystemTask::Work() {
         case Messages::SleepTrackerToggled:
           if (infiniSleepController.IsTrackerEnabled()) {
             activitySessionStart = UtcNowSeconds();
-          } else if (activitySessionStart != 0 && UtcNowSeconds() - activitySessionStart < minimumSessionSeconds) {
-            // Started by accident, or to look at the app, and stopped again straight away. What
-            // it recorded is not a short night, it is nothing at all, and left in the log it
-            // would be handed to the phone as sleep with no way to tell it apart from the real
-            // thing. Nothing else writes to the log during a session, so the whole tail is this
-            // session's.
-            activityLogController.DropSince(activitySessionStart);
+            RecordSessionBoundary();
+            // A record's timestamp is stored rounded down to the minute, so the boundary just
+            // added is usually a few seconds before the session started. Taking the stored value
+            // back is what makes a discard below reach it, rather than leaving one record behind
+            // claiming a session that was taken away.
+            {
+              const uint32_t stored = activityLogController.NewestTimestamp();
+              if (stored != 0 && stored < activitySessionStart) {
+                activitySessionStart = stored;
+              }
+            }
+          } else if (activitySessionStart != 0) {
+            if (UtcNowSeconds() - activitySessionStart < minimumSessionSeconds) {
+              // Started by accident, or to look at the app, and stopped again straight away. What
+              // it recorded is not a short night, it is nothing at all, and left in the log it
+              // would be handed to the phone as sleep with no way to tell it apart from the real
+              // thing. Nothing else writes to the log during a session, so the whole tail is this
+              // session's, boundary record included.
+              activityLogController.DropSince(activitySessionStart);
+            } else {
+              RecordSessionBoundary();
+            }
             activitySessionStart = 0;
           }
           break;
@@ -705,6 +720,21 @@ void SystemTask::NoteWearerAwake() {
     return;
   }
   awakeUntilTimestamp = UtcNowSeconds() + awakeWindowSeconds;
+}
+
+void SystemTask::RecordSessionBoundary() {
+  Pinetime::Controllers::ActivityRecord record;
+  record.timestamp = UtcNowSeconds();
+  // Awake, and not a guess: someone who just pressed start or stop is awake. Neither sensor is
+  // read, because a boundary marks an instant rather than an epoch, and a heart rate or a motion
+  // count attached to it would describe a stretch of time nothing was tracking.
+  record.kind = Controllers::ActivityKind::Awake;
+  activityLogController.Add(record);
+
+  // The accumulator is emptied so whatever movement it carried from before the session does not
+  // land on the first epoch of it, which would report the walk to bed as the first five minutes
+  // of sleep.
+  motionController.TakeActivityCounts();
 }
 
 void SystemTask::RecordActivityEpoch() {
