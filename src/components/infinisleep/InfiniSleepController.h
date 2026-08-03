@@ -115,6 +115,8 @@ namespace Pinetime {
       /// A no-op if the timer does not exist yet, so it is safe to call before tracking starts.
       void SetTrackerPeriodMinutes(uint8_t minutes);
       void DisableTracker();
+      /// Tells SystemTask the session has started or ended, so it can bound what was recorded.
+      void NotifyTrackerToggled();
       void UpdateTracker();
 
       void SetSettingsChanged() {

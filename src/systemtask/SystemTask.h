@@ -187,6 +187,14 @@ namespace Pinetime {
       /// press a button is rarely asleep again in the minute after, and the sleep this costs is
       /// at most one epoch of it, while the fragmentation it catches is the thing being measured.
       static constexpr uint32_t awakeWindowSeconds = 15 * 60;
+
+      /// When the current sleep session started, in UTC seconds, or zero outside one.
+      uint32_t activitySessionStart = 0;
+      /// Shorter than this and a session is discarded rather than recorded. Matches the minimum
+      /// Gadgetbridge itself applies before it will call a run of samples a sleep session, so
+      /// what the watch keeps and what the phone charts agree. Dropping it here also keeps the
+      /// ring and the database free of records nothing will ever draw.
+      static constexpr uint32_t minimumSessionSeconds = 5 * 60;
       /// True while an epoch is waiting on the heart rate sensor, so a second tracker tick
       /// cannot start a measurement on top of the one already running.
       bool activityEpochMeasuring = false;

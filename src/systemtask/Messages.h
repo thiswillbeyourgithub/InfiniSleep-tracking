@@ -37,6 +37,10 @@ namespace Pinetime {
       SleepTrackerHeartRateReady,
       // Time for one of the background heart rate measurements the wearer asked for in settings.
       HeartRatePollTimerExpired,
+      // A sleep session has just started or just ended. Which one is not carried: the message
+      // arrives after the controller has switched, so asking it is both shorter and harder to
+      // get out of step with.
+      SleepTrackerToggled,
     };
   }
 }

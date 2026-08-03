@@ -70,6 +70,7 @@ void InfiniSleepController::EnableTracker() {
   trackerPeriodMinutes = 0;
   SetTrackerPeriodMinutes(GetTrackerIntervalMinutes());
   xTimerStart(trackerUpdateTimer, 0);
+  NotifyTrackerToggled();
 }
 
 void InfiniSleepController::SetTrackerPeriodMinutes(uint8_t minutes) {
@@ -92,6 +93,15 @@ void InfiniSleepController::DisableTracker() {
     xTimerStop(trackerUpdateTimer, 0);
   }
   isEnabled = false;
+  NotifyTrackerToggled();
+}
+
+void InfiniSleepController::NotifyTrackerToggled() {
+  // Guarded because the tracker can be disabled while restoring settings at boot, before
+  // anything has registered.
+  if (systemTask != nullptr) {
+    systemTask->PushMessage(System::Messages::SleepTrackerToggled);
+  }
 }
 
 void InfiniSleepController::UpdateTracker() {

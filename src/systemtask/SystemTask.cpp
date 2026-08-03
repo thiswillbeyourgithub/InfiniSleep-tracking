@@ -432,6 +432,19 @@ void SystemTask::Work() {
         case Messages::HeartRatePollTimerExpired:
           PollHeartRate();
           break;
+        case Messages::SleepTrackerToggled:
+          if (infiniSleepController.IsTrackerEnabled()) {
+            activitySessionStart = UtcNowSeconds();
+          } else if (activitySessionStart != 0 && UtcNowSeconds() - activitySessionStart < minimumSessionSeconds) {
+            // Started by accident, or to look at the app, and stopped again straight away. What
+            // it recorded is not a short night, it is nothing at all, and left in the log it
+            // would be handed to the phone as sleep with no way to tell it apart from the real
+            // thing. Nothing else writes to the log during a session, so the whole tail is this
+            // session's.
+            activityLogController.DropSince(activitySessionStart);
+            activitySessionStart = 0;
+          }
+          break;
         default:
           break;
       }
