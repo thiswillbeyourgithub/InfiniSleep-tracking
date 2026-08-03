@@ -321,6 +321,7 @@ void SystemTask::Work() {
                   settingsController.isWakeUpModeOn(Pinetime::Controllers::Settings::WakeUpMode::DoubleTap)) ||
                  (gesture == Pinetime::Applications::TouchEvents::Tap &&
                   settingsController.isWakeUpModeOn(Pinetime::Controllers::Settings::WakeUpMode::SingleTap)))) {
+              NoteWearerAwake();
               GoToRunning();
             }
           }
@@ -334,6 +335,7 @@ void SystemTask::Work() {
             // This is for faster wakeup, sacrificing special longpress and doubleclick handling while sleeping
             if (IsSleeping()) {
               fastWakeUpDone = true;
+              NoteWearerAwake();
               GoToRunning();
               break;
             }
@@ -679,11 +681,23 @@ void SystemTask::PollHeartRate() {
   BeginActivityEpoch(Controllers::ActivityKind::Unknown, true);
 }
 
+uint32_t SystemTask::UtcNowSeconds() {
+  return std::chrono::duration_cast<std::chrono::seconds>(dateTimeController.UTCDateTime().time_since_epoch()).count();
+}
+
+void SystemTask::NoteWearerAwake() {
+  if (!infiniSleepController.IsTrackerEnabled()) {
+    // Outside a session there is nothing to correct: a background poll is recorded as Unknown
+    // precisely because the watch has not been told what the wearer is doing.
+    return;
+  }
+  awakeUntilTimestamp = UtcNowSeconds() + awakeWindowSeconds;
+}
+
 void SystemTask::RecordActivityEpoch() {
   Pinetime::Controllers::ActivityRecord record;
 
-  record.timestamp =
-    std::chrono::duration_cast<std::chrono::seconds>(dateTimeController.UTCDateTime().time_since_epoch()).count();
+  record.timestamp = UtcNowSeconds();
 
   // Asleep for a tracker epoch, since the wearer said so by starting a session. The watch has
   // no basis for a finer claim: actigraphy and an occasional heart rate cannot separate sleep
@@ -691,6 +705,13 @@ void SystemTask::RecordActivityEpoch() {
   // measurement. A background poll carries Unknown for the same reason, in the other
   // direction: nobody told the watch what the wearer is doing and it cannot tell.
   record.kind = activityEpochKind;
+
+  // Except when the wearer said otherwise by picking the watch up. That is the one thing during
+  // a session the watch does know, and without it a night checked at three in the morning is
+  // charted as unbroken sleep.
+  if (record.kind == Controllers::ActivityKind::Asleep && record.timestamp < awakeUntilTimestamp) {
+    record.kind = Controllers::ActivityKind::Awake;
+  }
 
   if (activityEpochWantsHeartRate) {
     // The state matters as much as the value. HeartRateController holds its last reading

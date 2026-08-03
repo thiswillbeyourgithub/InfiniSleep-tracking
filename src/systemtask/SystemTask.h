@@ -172,6 +172,21 @@ namespace Pinetime {
       void BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate);
       /// Closes one tracker epoch into the activity log, and turns the sensor back off.
       void RecordActivityEpoch();
+      /// The clock as the activity log wants it: UTC seconds since the epoch.
+      uint32_t UtcNowSeconds();
+
+      /// Called when the wearer physically acted on the watch, which during a sleep session is
+      /// the one thing that separates being awake from lying still. Only deliberate acts count,
+      /// so a wrist raise does not: rolling over triggers it, and a night spent recorded as awake
+      /// would be worse than one recorded as unbroken sleep.
+      void NoteWearerAwake();
+      /// Until when epochs are recorded as Awake rather than Asleep, in UTC seconds. Zero when
+      /// nothing has happened, which is safe: no timestamp is ever below it.
+      uint32_t awakeUntilTimestamp = 0;
+      /// How long one look at the watch claims. Generous on purpose: someone who wakes enough to
+      /// press a button is rarely asleep again in the minute after, and the sleep this costs is
+      /// at most one epoch of it, while the fragmentation it catches is the thing being measured.
+      static constexpr uint32_t awakeWindowSeconds = 15 * 60;
       /// True while an epoch is waiting on the heart rate sensor, so a second tracker tick
       /// cannot start a measurement on top of the one already running.
       bool activityEpochMeasuring = false;
