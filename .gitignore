@@ -65,3 +65,4 @@ package-lock.json
 # Working notes for the sleep tracking effort. Kept on disk rather than in the history:
 # it is a scratchpad that is rewritten constantly, not documentation anyone else should read.
 /PLAN.md
+.tokensave
