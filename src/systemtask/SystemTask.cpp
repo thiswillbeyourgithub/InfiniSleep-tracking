@@ -719,7 +719,34 @@ void SystemTask::NoteWearerAwake() {
     // precisely because the watch has not been told what the wearer is doing.
     return;
   }
-  awakeUntilTimestamp = UtcNowSeconds() + awakeWindowSeconds;
+
+  const uint32_t now = UtcNowSeconds();
+
+  // Waking is not instantaneous, and someone who wakes at night usually lies still for a while
+  // before reaching for the watch, in case they drop off again. So the minutes before the act
+  // are awake too, and unlike the window ahead they have already been recorded.
+  uint32_t awakeSince = now - awakeLeadInSeconds;
+
+  // Two acts close together say more than either does alone: someone who checked the watch
+  // twice inside half an hour was awake for the whole stretch, whereas the window ahead of the
+  // first act expires and records the middle of it as sleep.
+  if (lastAwakeSignalTimestamp != 0 && now - lastAwakeSignalTimestamp <= awakeCoalesceSeconds &&
+      lastAwakeSignalTimestamp < awakeSince) {
+    awakeSince = lastAwakeSignalTimestamp;
+  }
+
+  // Clamped so a nap started shortly after a night cannot reach back into the night's records,
+  // which are a session the wearer already ended and not this one's to rewrite.
+  if (activitySessionStart != 0 && awakeSince < activitySessionStart) {
+    awakeSince = activitySessionStart;
+  }
+
+  // Only Asleep is rewritten, so a boundary record or a background poll caught by the window
+  // keeps what it said, and the correction cannot invent sleep it did not find.
+  activityLogController.Remark(awakeSince, Controllers::ActivityKind::Asleep, Controllers::ActivityKind::Awake);
+
+  lastAwakeSignalTimestamp = now;
+  awakeUntilTimestamp = now + awakeWindowSeconds;
 }
 
 void SystemTask::RecordSessionBoundary() {

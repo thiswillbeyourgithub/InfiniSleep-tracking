@@ -187,6 +187,9 @@ namespace Pinetime {
       /// the one thing that separates being awake from lying still. Only deliberate acts count,
       /// so a wrist raise does not: rolling over triggers it, and a night spent recorded as awake
       /// would be worse than one recorded as unbroken sleep.
+      ///
+      /// Marks time in both directions: forward through the window below on epochs not yet
+      /// recorded, and backward by rewriting ones already in the log.
       void NoteWearerAwake();
       /// Until when epochs are recorded as Awake rather than Asleep, in UTC seconds. Zero when
       /// nothing has happened, which is safe: no timestamp is ever below it.
@@ -195,6 +198,20 @@ namespace Pinetime {
       /// press a button is rarely asleep again in the minute after, and the sleep this costs is
       /// at most one epoch of it, while the fragmentation it catches is the thing being measured.
       static constexpr uint32_t awakeWindowSeconds = 15 * 60;
+      /// How long before the act counts as awake as well, because waking is not instantaneous
+      /// and someone who wakes at night tends to lie still a while before reaching for the watch,
+      /// in case they fall back asleep. Reaches one epoch further back than it says in practice,
+      /// since a host attributes an epoch to the record that closes it, so the record inside the
+      /// lead in carries the epoch before it too.
+      static constexpr uint32_t awakeLeadInSeconds = 5 * 60;
+      /// How close two acts have to be for the stretch between them to count as awake throughout.
+      /// Wider than the window ahead, which is what makes it do anything, and well short of the
+      /// hour Gadgetbridge splits a session at, so a real stretch of falling back asleep between
+      /// two checks is still recorded as the sleep it was.
+      static constexpr uint32_t awakeCoalesceSeconds = 30 * 60;
+      /// When the wearer last acted on the watch during this session, in UTC seconds, or zero.
+      /// Only ever set inside a session, since NoteWearerAwake() returns early outside one.
+      uint32_t lastAwakeSignalTimestamp = 0;
 
       /// When the current sleep session started, in UTC seconds, or zero outside one.
       uint32_t activitySessionStart = 0;
