@@ -101,6 +101,7 @@ Sleep::Sleep(Controllers::InfiniSleepController& infiniSleepController,
     activityLogController {activityLogController},
     dateTimeController {dateTimeController},
     wakeLock(systemTask),
+    systemTask {systemTask},
     motorController {motorController},
     clockType {clockType},
     displayApp {displayApp} {
@@ -172,6 +173,7 @@ void Sleep::UpdateDisplay() {
   // allocated at the same address on the next page, which is enough to change the wrong setting.
   btnWakeMode = btnCycles = btnTestMotorGradual = btnMotorStrength = btnPushesToStop = nullptr;
   btnHeartRateTracking = btnBodyTracking = btnTrackerInterval = btnMotionInterval = nullptr;
+  btnNotAsleepYet = nullptr;
 
   // Clear the screen
   lv_obj_clean(lv_scr_act());
@@ -199,6 +201,12 @@ void Sleep::UpdateDisplay() {
     case SleepDisplayState::Log:
       DrawLogScreen();
       pageIndicatorLog.Create();
+      break;
+    // No page indicator: it is not one of the pages the indicators count, and drawing a sixth
+    // dot only while tracking would say the app grew a page rather than that this one is here
+    // for the night.
+    case SleepDisplayState::Marks:
+      DrawMarksScreen();
       break;
   }
   drawnState = displayState;
@@ -633,6 +641,45 @@ void Sleep::DrawLogScreen() {
   lv_obj_align(footer, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, 182);
 }
 
+void Sleep::DrawMarksScreen() {
+  lv_obj_t* title = lv_label_create(lv_scr_act(), nullptr);
+  lv_label_set_text_static(title, "Tracking");
+  lv_obj_align(title, lv_scr_act(), LV_ALIGN_IN_TOP_MID, 0, 8);
+  lv_obj_set_style_local_text_color(title, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
+
+  // Said plainly, because the button rewrites the night that has already been recorded and the
+  // page is read at two in the morning if it is read at all.
+  lv_obj_t* explanation = lv_label_create(lv_scr_act(), nullptr);
+  lv_label_set_text_static(explanation, "Everything since\nyou pressed start\nbecomes awake.");
+  lv_obj_align(explanation, lv_scr_act(), LV_ALIGN_IN_TOP_LEFT, 10, 44);
+  lv_obj_set_style_local_text_color(explanation, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
+
+  btnNotAsleepYet = lv_btn_create(lv_scr_act(), nullptr);
+  btnNotAsleepYet->user_data = this;
+  lv_obj_set_size(btnNotAsleepYet, 220, 60);
+  lv_obj_align(btnNotAsleepYet, nullptr, LV_ALIGN_CENTER, 0, 30);
+  lv_obj_set_event_cb(btnNotAsleepYet, btnEventHandler);
+
+  lv_obj_t* btnLabel = lv_label_create(btnNotAsleepYet, nullptr);
+  lv_label_set_text_static(btnLabel, "Not asleep yet");
+
+  // Empty until the button is used, so the page does not claim a mark that was never made.
+  lv_obj_t* status = lv_label_create(lv_scr_act(), nullptr);
+  if (notAsleepMarked) {
+    // The hour is kept as the clock gave it, and folded here like every other time on these
+    // pages, so that changing the clock type does not leave an old mark in the other format.
+    uint8_t hour = notAsleepMarkHour;
+    if (clockType != Controllers::Settings::ClockType::H24) {
+      hour = (hour % 12 == 0) ? 12 : hour % 12;
+    }
+    lv_label_set_text_fmt(status, "Marked at %02d:%02d", hour, notAsleepMarkMinute);
+  } else {
+    lv_label_set_text_static(status, "");
+  }
+  lv_obj_align(status, lv_scr_act(), LV_ALIGN_IN_BOTTOM_MID, 0, -8);
+  lv_obj_set_style_local_text_color(status, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
+}
+
 void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
   if (event == LV_EVENT_CLICKED) {
     if (obj == btnSnooze) {
@@ -663,6 +710,19 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
         displayState = SleepDisplayState::Info;
         UpdateDisplay();
       }
+      return;
+    }
+    if (obj == btnNotAsleepYet) {
+      // The system task owns the session and the log, so it is asked rather than reached into.
+      // It also decides whether there is a session at all, which is why nothing is checked here.
+      systemTask.PushMessage(Pinetime::System::Messages::WearerNotAsleepYet);
+      notAsleepMarked = true;
+      notAsleepMarkHour = infiniSleepController.GetCurrentHour();
+      notAsleepMarkMinute = infiniSleepController.GetCurrentMinute();
+      // In the dark, with the screen dimmed for the night, a buzz is the part of this that is
+      // actually noticed.
+      motorController.RunForDuration(35);
+      UpdateDisplay();
       return;
     }
     if (obj == trackerToggleBtn) {
@@ -839,9 +899,32 @@ bool Sleep::OnTouchEvent(Pinetime::Applications::TouchEvents event) {
     return true;
   }
 
+  // The marks page is left the way it was entered, and cannot be swiped past. Handled before
+  // the tracker check below so that a session ending while the page is up, which the alarm can
+  // do, still leaves a way back rather than a page with no exit.
+  if (displayState == SleepDisplayState::Marks) {
+    if (event == TouchEvents::SwipeDown) {
+      displayApp.SetFullRefresh(Pinetime::Applications::DisplayApp::FullRefreshDirections::Down);
+      displayState = SleepDisplayState::Info;
+      UpdateDisplay();
+      return true;
+    }
+    // Anything other than a swipe up still falls through, so the app can be closed from here
+    // the same way it can from any other page.
+    if (event == TouchEvents::SwipeUp) {
+      return true;
+    }
+  }
+
   // While the tracker runs the app stays on the tracking page, so neither the wake up time
-  // nor the settings can be changed during the night
+  // nor the settings can be changed during the night. Swiping up off it is the exception, and
+  // reaches the one page that is about the session rather than about how it was set up.
   if (infiniSleepController.IsTrackerEnabled() && (event == TouchEvents::SwipeDown || event == TouchEvents::SwipeUp)) {
+    if (event == TouchEvents::SwipeUp && displayState == SleepDisplayState::Info) {
+      displayApp.SetFullRefresh(Pinetime::Applications::DisplayApp::FullRefreshDirections::Up);
+      displayState = SleepDisplayState::Marks;
+      UpdateDisplay();
+    }
     return true;
   }
 

@@ -41,6 +41,8 @@ namespace Pinetime {
       // arrives after the controller has switched, so asking it is both shorter and harder to
       // get out of step with.
       SleepTrackerToggled,
+      // The wearer says they have not fallen asleep yet, so the session so far was not sleep.
+      WearerNotAsleepYet,
     };
   }
 }

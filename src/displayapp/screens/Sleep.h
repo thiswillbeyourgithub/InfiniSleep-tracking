@@ -38,7 +38,12 @@ namespace Pinetime {
         // the alarm settings, then the wake up time setter, then the tracking page. Swiping down
         // walks up that list, swiping up walks down it. Alarm is the page the app starts on,
         // since it is the one there is a reason to open the app for.
-        enum class SleepDisplayState { Log, Sensors, Settings, Alarm, Info };
+        //
+        // Marks is not part of that list. It sits below the tracking page and is reachable only
+        // while the tracker runs, because everything on it is something to say about a session
+        // in progress. So it is outside firstPage and lastPage, and the page indicators, which
+        // count the pages that are always there.
+        enum class SleepDisplayState { Log, Sensors, Settings, Alarm, Info, Marks };
         static constexpr SleepDisplayState firstPage = SleepDisplayState::Log;
         static constexpr SleepDisplayState lastPage = SleepDisplayState::Info;
         SleepDisplayState displayState = SleepDisplayState::Alarm;
@@ -57,6 +62,9 @@ namespace Pinetime {
 
       private:
         System::WakeLock wakeLock;
+        /// Only to tell it what the wearer said on the marks page. The log is the system task's
+        /// to change, since it owns the session, so the screen asks rather than writes.
+        System::SystemTask& systemTask;
         Controllers::MotorController& motorController;
         Controllers::Settings::ClockType clockType;
         DisplayApp& displayApp;
@@ -88,6 +96,9 @@ namespace Pinetime {
         /// What the activity log is holding and whether anything is collecting it. Read only:
         /// the watch cannot make the phone sync, only show what there would be to sync.
         void DrawLogScreen();
+        /// What the wearer can tell the watch about the night in progress, which is the one
+        /// source of information no sensor on it has.
+        void DrawMarksScreen();
         /// One "name  value" row of the log page. Returns the value label, empty and set to
         /// realign itself, so the caller can write into it and have it stay against the edge.
         lv_obj_t* CreateLogRow(const char* name, int16_t yOffset);
@@ -116,6 +127,14 @@ namespace Pinetime {
         lv_obj_t *btnWakeMode, *btnCycles, *btnTestMotorGradual, *lblMotorStrength, *btnMotorStrength, *btnPushesToStop;
 
         lv_obj_t *btnHeartRateTracking, *btnBodyTracking, *btnTrackerInterval, *btnMotionInterval;
+
+        lv_obj_t* btnNotAsleepYet = nullptr;
+        /// When the wearer last said they were still awake, so the marks page can show that it
+        /// heard. Held on the screen rather than asked of anything, so it is forgotten when the
+        /// app is closed: it is a confirmation of a tap, not a record. The log holds the record.
+        bool notAsleepMarked = false;
+        uint8_t notAsleepMarkHour = 0;
+        uint8_t notAsleepMarkMinute = 0;
 
         Widgets::PageIndicator pageIndicatorLog = Widgets::PageIndicator(0, 5);
         Widgets::PageIndicator pageIndicatorSensors = Widgets::PageIndicator(1, 5);

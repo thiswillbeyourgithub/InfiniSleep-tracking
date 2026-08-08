@@ -432,6 +432,9 @@ void SystemTask::Work() {
         case Messages::HeartRatePollTimerExpired:
           PollHeartRate();
           break;
+        case Messages::WearerNotAsleepYet:
+          MarkSessionAwakeSoFar();
+          break;
         case Messages::SleepTrackerToggled:
           if (infiniSleepController.IsTrackerEnabled()) {
             activitySessionStart = UtcNowSeconds();
@@ -746,6 +749,20 @@ void SystemTask::NoteWearerAwake() {
 
   lastAwakeSignalTimestamp = now;
   awakeUntilTimestamp = now + awakeWindowSeconds;
+}
+
+void SystemTask::MarkSessionAwakeSoFar() {
+  if (!infiniSleepController.IsTrackerEnabled() || activitySessionStart == 0) {
+    return;
+  }
+
+  // The whole session so far, rather than a window: someone who says they have not fallen asleep
+  // yet is talking about the stretch since they pressed start, however long that is.
+  activityLogController.Remark(activitySessionStart, Controllers::ActivityKind::Asleep, Controllers::ActivityKind::Awake);
+
+  // And they are awake right now, which is the same thing a button press says, so the window
+  // ahead comes from the same place rather than being set twice in two ways.
+  NoteWearerAwake();
 }
 
 void SystemTask::RecordSessionBoundary() {

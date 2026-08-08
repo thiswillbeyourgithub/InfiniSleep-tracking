@@ -191,6 +191,12 @@ namespace Pinetime {
       /// Marks time in both directions: forward through the window below on epochs not yet
       /// recorded, and backward by rewriting ones already in the log.
       void NoteWearerAwake();
+
+      /// Rewrites everything recorded since the session started as Awake, for the wearer who
+      /// started the tracker and then read for an hour. Nothing the watch can measure tells that
+      /// apart from lying still asleep, so it is the wearer's to say, and saying it is the whole
+      /// point of the marks page.
+      void MarkSessionAwakeSoFar();
       /// Until when epochs are recorded as Awake rather than Asleep, in UTC seconds. Zero when
       /// nothing has happened, which is safe: no timestamp is ever below it.
       uint32_t awakeUntilTimestamp = 0;
