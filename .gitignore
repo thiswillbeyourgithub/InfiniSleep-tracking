@@ -61,6 +61,9 @@ package-lock.json
 /build_oli.log
 /build_gb.sh
 /build_gb.log
+/make_release_infinitime.sh
+/make_release_gadgetbridge.sh
+/make_release_common.sh
 /CLAUDE.local.md
 # Working notes for the sleep tracking effort. Kept on disk rather than in the history:
 # it is a scratchpad that is rewritten constantly, not documentation anyone else should read.
