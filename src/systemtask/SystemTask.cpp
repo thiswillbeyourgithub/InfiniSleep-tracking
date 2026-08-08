@@ -730,8 +730,7 @@ void SystemTask::NoteWearerAwake() {
   // Two acts close together say more than either does alone: someone who checked the watch
   // twice inside half an hour was awake for the whole stretch, whereas the window ahead of the
   // first act expires and records the middle of it as sleep.
-  if (lastAwakeSignalTimestamp != 0 && now - lastAwakeSignalTimestamp <= awakeCoalesceSeconds &&
-      lastAwakeSignalTimestamp < awakeSince) {
+  if (lastAwakeSignalTimestamp != 0 && now - lastAwakeSignalTimestamp <= awakeCoalesceSeconds && lastAwakeSignalTimestamp < awakeSince) {
     awakeSince = lastAwakeSignalTimestamp;
   }
 
