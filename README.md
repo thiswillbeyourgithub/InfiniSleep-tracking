@@ -21,6 +21,9 @@ It builds on two upstream efforts, neither of which is merged:
 - A BLE service, `00060000-78fc-48fe-8e23-433b3a1942d0`, that hands the records over in batches and only reclaims the space once the host says it stored them.
 - Both sampling rates as settings, on a new Sensors page in the Sleep app.
 - Heart rate measured on a timer outside any sleep session, every 5, 15, 30 or 60 minutes, set from a new entry in the settings menu and off by default. It stands down while the sleep tracker runs and only measures with the screen off, so it never takes the sensor from the heart rate app.
+- Awake time told apart from sleep within a session. A button press or a wake gesture during the night marks the next 15 minutes awake, and the 5 minutes before it, since waking is not instantaneous. Two of them within half an hour mark the whole stretch between. A wrist raise deliberately does not count, because rolling over triggers it.
+- A marks page, reachable by swiping up from the tracking page while a session runs, with a **Not asleep yet** button. It rewrites everything since the session started as awake, for the night that begins with an hour of reading in bed.
+- Sessions under five minutes discarded rather than handed over, and one awake record written at each end of a session, so a companion app charts the stretch that was tracked instead of everything back to the previous sample.
 - A backoff below 25 percent battery: the epoch floors at 30 minutes and the accelerometer poll at 1 second, so the tracker does not flatten the battery before morning, and the log is written to flash on the way past that threshold so a battery that dies at 4am does not take the night with it.
 
 The BLE service is deliberately kept independent of how sleep is tracked, so it could be reviewed on its own.
@@ -83,8 +86,19 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 67d2cbdf feat(activity): measure heart rate on a timer outside sleep sessions
 - 9a571a29 fix(infinisleep): disable the wake alarm when the tracker is stopped
 - 574002b3 chore: drop the Metronome app
+- 5aaaebf8 feat(sleep): show the activity log record count on the Info page
+- f5f2b860 fix(activity): stop publishing self started measurements as live heart rate
+- ca0976f6 feat(sleep): add a log page showing what is waiting to be collected
+- 5839e9ca feat(activity): record when a host last asked for records
+- 8baf09cd feat(activity): record the quarter hour after a look at the watch as awake
+- 1f0cfe37 feat(activity): let the log take records back from the newest end
+- e23dd77a feat(infinisleep): discard a session that lasted under five minutes
+- 59267b6d feat(activity): bound a session with an awake record at each end
+- 1f3666c1 feat(activity): let the log rewrite the kind of records it already holds
+- 4f745214 feat(activity): mark the minutes before a look at the watch as awake too
+- 5a1501d0 feat(infinisleep): add a marks page with "Not asleep yet"
 
-Plus the commits that write this list, which cannot list their own hash.
+Plus the commits that write this list, which cannot list their own hash, and the odd formatting or gitignore commit not worth a line.
 
 ## Upstream
 
