@@ -4,6 +4,17 @@ A personal fork of [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime), th
 
 The work lives on the `infinisleep-health` branch. The other half is [Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), the companion app that collects what this firmware records. Neither half is useful without the other.
 
+## Ready to install, no toolchain needed
+
+**Built firmware is published on the [Releases page](../../releases).** Download the `pinetime-mcuboot-app-dfu-*.zip` from the newest release and flash it straight to the watch. There is nothing to compile and no docker image to pull.
+
+- **From the phone**, open the zip with Gadgetbridge, which knows how to send a PineTime DFU package. Stock Gadgetbridge does this, not only the companion fork.
+- **From a computer**, `python dfu.py -z pinetime-mcuboot-app-dfu-<version>.zip -a <MAC> --legacy`, using the `dfu.py` from the InfiniTime repository. The one from wasp-os fails with a UUID error.
+
+Those files are **compiled by me, on my own machine**, from the commit each release names. No CI produced them, they are not signed, and nothing about them is reproducible beyond the fact that the source they came from is right here. If you would rather not take my word for it, the build instructions below produce the same thing from the same commit.
+
+Flashing an interrupted DFU leaves the watch in its bootloader and it can be flashed again, so this is recoverable, but it is still firmware. Read the upstream flashing notes if it is your first time.
+
 ## Why
 
 A stock PineTime can only report what it measures at the moment something is listening. Sleep happens exactly when the phone is least likely to be connected, so sleep charts stay empty no matter what the watch measured. This fork gives the watch a small log of its own and a way to hand it over later.
