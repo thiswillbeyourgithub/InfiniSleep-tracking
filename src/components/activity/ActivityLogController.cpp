@@ -160,6 +160,31 @@ void ActivityLogController::DropSince(uint32_t sinceTimestamp) {
   Unlock();
 }
 
+void ActivityLogController::Remark(uint32_t sinceTimestamp, ActivityKind from, ActivityKind to) {
+  Lock();
+
+  // Walked from the newest end and stopped at the first record that is too old, as DropSince
+  // does, since the records are ordered and the stretch being corrected is always the tail.
+  uint16_t changed = 0;
+  for (uint16_t offset = count; offset > 0; offset--) {
+    if (TimestampAt(offset - 1) < sinceTimestamp) {
+      break;
+    }
+    PackedRecord& packed = records[(head + offset - 1) % capacity];
+    if (packed.kind == static_cast<uint8_t>(from)) {
+      packed.kind = static_cast<uint8_t>(to);
+      changed++;
+    }
+  }
+
+  if (changed > 0) {
+    NRF_LOG_INFO("[ActivityLog] Remarked %u records from %u", changed, sinceTimestamp);
+    dirty = true;
+  }
+
+  Unlock();
+}
+
 void ActivityLogController::Flush() {
   Lock();
   if (dirty) {

@@ -20,12 +20,12 @@ static int failures = 0;
 namespace {
   constexpr uint32_t t0 = 1800000000;  // an arbitrary but realistic epoch, 2027-01-15
 
-  ActivityRecord Rec(uint32_t timestamp, uint8_t hr = 60, uint16_t motion = 1234) {
+  ActivityRecord Rec(uint32_t timestamp, uint8_t hr = 60, uint16_t motion = 1234, ActivityKind kind = ActivityKind::Asleep) {
     ActivityRecord record;
     record.timestamp = timestamp;
     record.heartRate = hr;
     record.motion = motion;
-    record.kind = ActivityKind::Asleep;
+    record.kind = kind;
     return record;
   }
 
@@ -183,6 +183,63 @@ int main() {
       ordered = ordered && all[i].timestamp > all[i - 1].timestamp;
     }
     CHECK(ordered);
+  }
+
+  {
+    printf("remarking rewrites the tail, only the kind asked for, and moves nothing\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    log.Add(Rec(t0 + 0 * 300));
+    log.Add(Rec(t0 + 1 * 300));
+    log.Add(Rec(t0 + 2 * 300, 60, 1234, ActivityKind::Unknown));  // a background poll in the way
+    log.Add(Rec(t0 + 3 * 300));
+    log.Add(Rec(t0 + 4 * 300));
+
+    log.Remark(t0 + 2 * 300, ActivityKind::Asleep, ActivityKind::Awake);
+
+    const auto all = ReadAll(log);
+    CHECK(all.size() == 5);
+    CHECK(all[0].kind == ActivityKind::Asleep);  // before the cut, left alone
+    CHECK(all[1].kind == ActivityKind::Asleep);
+    CHECK(all[2].kind == ActivityKind::Unknown);  // at the cut, but not the kind asked for
+    CHECK(all[3].kind == ActivityKind::Awake);
+    CHECK(all[4].kind == ActivityKind::Awake);
+    CHECK(all[0].timestamp == t0);  // nothing moved, and nothing was added or dropped
+    CHECK(all[4].timestamp == t0 + 4 * 300);
+    CHECK(all[3].heartRate == 60);
+    CHECK(log.RecordCount() == 5);
+  }
+
+  {
+    printf("remarking reaches across a wrap, and only dirties the log when it changed something\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    for (uint16_t i = 0; i < ActivityLogController::capacity + 20; i++) {
+      log.Add(Rec(t0 + i * 300));
+    }
+    log.Flush();
+
+    fs.contents.clear();
+    const uint32_t cut = log.NewestTimestamp() - 3 * 300;
+    log.Remark(cut, ActivityKind::Asleep, ActivityKind::Awake);
+    log.Flush();
+    CHECK(!fs.contents.empty());  // the correction reached flash
+
+    const auto all = ReadAll(log);
+    CHECK(all.size() == ActivityLogController::capacity);
+    CHECK(all[all.size() - 5].kind == ActivityKind::Asleep);
+    CHECK(all[all.size() - 4].kind == ActivityKind::Awake);
+    CHECK(all.back().kind == ActivityKind::Awake);
+
+    // Newer than everything held, so there is nothing to correct and nothing to write.
+    fs.contents.clear();
+    log.Remark(log.NewestTimestamp() + 300, ActivityKind::Asleep, ActivityKind::Awake);
+    log.Flush();
+    CHECK(fs.contents.empty());
   }
 
   {

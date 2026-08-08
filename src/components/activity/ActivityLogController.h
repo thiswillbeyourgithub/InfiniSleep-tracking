@@ -63,6 +63,15 @@ namespace Pinetime {
       /// gone from here by then, and a host that has stored them keeps them.
       void DropSince(uint32_t sinceTimestamp);
 
+      /// Rewrites the kind of every record at or after a timestamp that currently reads `from`,
+      /// so a stretch the wearer turns out to have been awake for can be corrected once that is
+      /// known. Records already handed to a host are gone from here and keep whatever they said.
+      ///
+      /// Takes both kinds rather than assuming the sleep one, so this stays a log that holds
+      /// records and knows nothing about what they mean. Nothing else here is affected: the
+      /// timestamps do not move, so the ordering the read side relies on is untouched.
+      void Remark(uint32_t sinceTimestamp, ActivityKind from, ActivityKind to);
+
       /// Writes the log to flash if anything changed since the last time, and does nothing
       /// otherwise.
       ///
