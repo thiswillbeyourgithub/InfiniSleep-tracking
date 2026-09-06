@@ -47,7 +47,10 @@ namespace Pinetime {
       static constexpr float minHR = 40.0f / 60.0f;
       // Maximum HR (Hz)
       static constexpr float maxHR = 230.0f / 60.0f;
-      // Threshold for high DC level after filtering
+      // Threshold for high DC level after filtering, as a fraction of the strongest peak in the
+      // heart rate region of interest. Relative rather than absolute because the spectrum is not
+      // normalised: every magnitude in it, the DC residual included, scales with how strong the
+      // pulse is, so an absolute limit rejects exactly the windows with the most signal in them.
       static constexpr float dcThreshold = 0.5f;
       // ALS detection factor
       static constexpr float alsFactor = 2.0f;

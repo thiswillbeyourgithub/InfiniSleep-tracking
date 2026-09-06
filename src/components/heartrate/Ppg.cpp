@@ -1,6 +1,4 @@
 #include "components/heartrate/Ppg.h"
-#include <nrf_log.h>
-#include <vector>
 
 using namespace Pinetime::Controllers;
 
@@ -211,7 +209,7 @@ int Ppg::ProcessHeartRate(bool init) {
   int specLen = spectrum.size();
   float max = SpectrumMax(spectrum, hrROIbegin, hrROIend);
   float signalToNoiseRatio = SignalToNoise(spectrum, hrROIbegin, hrROIend, max);
-  if (signalToNoiseRatio > signalToNoiseThreshold && spectrum.at(0) < dcThreshold) {
+  if (signalToNoiseRatio > signalToNoiseThreshold && spectrum.at(0) < dcThreshold * max) {
     threshold *= max;
     // Reuse VImag for interpolation x values passed to PeakSearch
     for (int idx = 0; idx < dataLength; idx++) {
