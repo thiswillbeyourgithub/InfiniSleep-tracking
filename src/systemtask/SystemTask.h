@@ -172,6 +172,9 @@ namespace Pinetime {
       void BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate);
       /// Closes one tracker epoch into the activity log, and turns the sensor back off.
       void RecordActivityEpoch();
+      /// Logs the reading the heart rate app currently has, so a check the wearer took by hand is
+      /// collected like any other. Touches neither sensor: the app owns the one it is driving.
+      void RecordManualHeartRate();
 
       /// Writes one Awake record at the instant a session starts or ends.
       ///

@@ -29,7 +29,7 @@ namespace {
 }
 
 HeartRate::HeartRate(Controllers::HeartRateController& heartRateController, System::SystemTask& systemTask)
-  : heartRateController {heartRateController}, wakeLock(systemTask) {
+  : heartRateController {heartRateController}, systemTask {systemTask}, wakeLock(systemTask) {
   bool isHrRunning = heartRateController.State() != Controllers::HeartRateController::States::Stopped;
   label_hr = lv_label_create(lv_scr_act(), nullptr);
 
@@ -91,14 +91,34 @@ void HeartRate::Refresh() {
       }
   }
 
+  if (state == Controllers::HeartRateController::States::Running && heartRateController.HeartRate() > 0) {
+    LogReading();
+  }
+
   lv_label_set_text_static(label_status, ToString(state));
   lv_obj_align(label_status, label_hr, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+}
+
+void HeartRate::LogReading() {
+  const TickType_t now = xTaskGetTickCount();
+  // The log keeps at most one record a minute, so telling the system task more often gains nothing
+  // and costs something: PushMessage blocks while the queue is full, and this runs ten times a second.
+  if (loggedThisRun && now - lastLogTicks < logInterval) {
+    return;
+  }
+
+  loggedThisRun = true;
+  lastLogTicks = now;
+  systemTask.PushMessage(Pinetime::System::Messages::ManualHeartRateMeasured);
 }
 
 void HeartRate::OnStartStopEvent(lv_event_t event) {
   if (event == LV_EVENT_CLICKED) {
     if (heartRateController.State() == Controllers::HeartRateController::States::Stopped) {
       heartRateController.Start();
+      // A new run, so its first reading is logged as soon as it arrives rather than waiting out the
+      // interval left over from the previous one.
+      loggedThisRun = false;
       UpdateStartStopButton(heartRateController.State() != Controllers::HeartRateController::States::Stopped);
       wakeLock.Lock();
       lv_obj_set_style_local_text_color(label_hr, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::highlight);

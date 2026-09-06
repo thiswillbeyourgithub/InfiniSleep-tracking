@@ -432,6 +432,9 @@ void SystemTask::Work() {
         case Messages::HeartRatePollTimerExpired:
           PollHeartRate();
           break;
+        case Messages::ManualHeartRateMeasured:
+          RecordManualHeartRate();
+          break;
         case Messages::WearerNotAsleepYet:
           MarkSessionAwakeSoFar();
           break;
@@ -788,6 +791,33 @@ void SystemTask::RecordSessionBoundary() {
   // land on the first epoch of it, which would report the walk to bed as the first five minutes
   // of sleep.
   motionController.TakeActivityCounts();
+}
+
+void SystemTask::RecordManualHeartRate() {
+  // The app pushes this as soon as it has something on screen, and a few milliseconds later the
+  // reading can already be gone, so the state is checked here rather than trusted from there.
+  if (heartRateController.State() != Controllers::HeartRateController::States::Running) {
+    return;
+  }
+  const uint8_t heartRate = heartRateController.HeartRate();
+  if (heartRate == 0) {
+    return;
+  }
+
+  Pinetime::Controllers::ActivityRecord record;
+  record.timestamp = UtcNowSeconds();
+  record.heartRate = heartRate;
+  // Awake, and not a guess: the wearer is holding the watch and reading the number off it. Inside a
+  // sleep session that is the same thing picking the watch up says, so it agrees with NoteWearerAwake
+  // rather than contradicting the epochs around it.
+  record.kind = Controllers::ActivityKind::Awake;
+  // Motion is left at not measured, and the accumulator deliberately not taken: it belongs to the
+  // epoch path, and emptying it here would rob a tracker epoch of the movement it is meant to report.
+
+  // Add() drops a record that is not newer by the minute, so a manual reading can cost the session
+  // the epoch closing in that same minute. Fair trade: the manual record carries a real heart rate
+  // for that minute, which is more than the epoch it displaces would have had.
+  activityLogController.Add(record);
 }
 
 void SystemTask::RecordActivityEpoch() {
