@@ -13,6 +13,8 @@ The work lives on the `infinisleep-health` branch. The other half is [Gadgetbrid
 
 Those files are **compiled by me, on my own machine**, from the commit each release names. No CI produced them, they are not signed, and nothing about them is reproducible beyond the fact that the source they came from is right here. If you would rather not take my word for it, the build instructions below produce the same thing from the same commit.
 
+Updating from an earlier build of this fork **resets every watch setting once**: watch face, brightness, wake modes, steps goal and heart rate interval all go back to their defaults. The settings file carries a version, this release changed it, and a file whose version does not match is discarded rather than misread.
+
 Flashing an interrupted DFU leaves the watch in its bootloader and it can be flashed again, so this is recoverable, but it is still firmware. Read the upstream flashing notes if it is your first time.
 
 ## Why
@@ -31,7 +33,9 @@ It builds on two upstream efforts, neither of which is merged:
 - A ring of 341 records (timestamp, motion, heart rate, kind), stored packed at 6 bytes each and mirrored to `/.system/activity.dat` so it survives a reboot. About three and a half nights at a 5 minute epoch.
 - A BLE service, `00060000-78fc-48fe-8e23-433b3a1942d0`, that hands the records over in batches and only reclaims the space once the host says it stored them.
 - Both sampling rates as settings, on a new Sensors page in the Sleep app.
-- Heart rate measured on a timer outside any sleep session, every 5, 15, 30 or 60 minutes, set from a new entry in the settings menu and off by default. It stands down while the sleep tracker runs and only measures with the screen off, so it never takes the sensor from the heart rate app.
+- Heart rate measured on a timer outside any sleep session, every 5, 15, 30 or 60 minutes, set from a new entry in the settings menu and off by default. It stands down while the sleep tracker runs, and with the screen on it records whatever the heart rate app is measuring rather than starting a measurement of its own, so it never takes the sensor from the wearer. A measurement left running in the app also survives the night now: the poll wakes the sensor for its reading and hands it back instead of ending it.
+- Every reading a manual heart rate check produces logged as well, marked awake, so the one measurement the wearer actually asked for is collected like the rest instead of only appearing on screen.
+- Watch faces that show only figures they can stand behind: `?` rather than a heart rate of `0` while the sensor has not converged or sees no skin, and no step count at all when nothing is counting steps.
 - Awake time told apart from sleep within a session. A button press or a wake gesture during the night marks the next 15 minutes awake, and the 5 minutes before it, since waking is not instantaneous. Two of them within half an hour mark the whole stretch between. A wrist raise deliberately does not count, because rolling over triggers it.
 - A marks page, reachable by swiping up from the tracking page while a session runs, with a **Not asleep yet** button. It rewrites everything since the session started as awake, for the night that begins with an hour of reading in bed.
 - Sessions under five minutes discarded rather than handed over, and one awake record written at each end of a session, so a companion app charts the stretch that was tracked instead of everything back to the previous sample.
@@ -44,6 +48,8 @@ The BLE service is deliberately kept independent of how sleep is tracked, so it 
 The BMA accelerometer in the unit this was written on never answers on I2C. It reads back a chip id of `0x00`, the About screen shows `Accel. ??? 00/2`, and the same bus reads the touch panel's ids correctly, so the bus is fine and the chip is not. Draining the battery flat did not clear it either, which rules out a latched state.
 
 The motion code is written and shipped anyway, for watches whose sensor works, but it is **off by default** and has to be turned on from the Sensors page in the Sleep app. Until then, records report `0xFFFF`, meaning not measured. The firmware also refuses to wake the accelerometer overnight when no sensor answered at boot, so turning the setting on costs nothing on a watch like this one.
+
+The step count the watch faces showed was a permanent `0` for the same reason, so it is hidden when no accelerometer answered at boot, and the Steps page in the settings menu carries a `Steps: on / off` toggle for a wearer with a working sensor who would rather not see one. On a watch like this one that page reads `Steps: no sensor` and does not pretend to toggle anything.
 
 **Anyone reading this should treat the motion side as unverified on hardware.** Heart rate, the log, the BLE transfer and the settings do work.
 
@@ -108,6 +114,11 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 1f3666c1 feat(activity): let the log rewrite the kind of records it already holds
 - 4f745214 feat(activity): mark the minutes before a look at the watch as awake too
 - 5a1501d0 feat(infinisleep): add a marks page with "Not asleep yet"
+- fb4f7c8e feat(settings): let the wearer turn steps off, and hide them with no sensor
+- 8464a0ff fix(watchface): show "?" rather than 0 for a heart rate that has no reading
+- 30ab9f09 fix(activity): stop a background poll from killing a manual measurement
+- 0765c1d6 feat(activity): log the readings a manual heart rate check produces
+- 43d0f260 chore(apps): put the sleep app before steps in the app list
 
 Plus the commits that write this list, which cannot list their own hash, and the odd formatting or gitignore commit not worth a line.
 
