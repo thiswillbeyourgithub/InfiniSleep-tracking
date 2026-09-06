@@ -16,11 +16,27 @@ namespace Pinetime {
       Ppg();
       int8_t Preprocess(uint16_t hrs, uint16_t als);
       int HeartRate();
+
+      /// Half width in bpm of the spread of the readings behind the last heart rate returned, or 0
+      /// when there is no reading.
+      ///
+      /// A measurement publishes a coarse estimate as soon as it has half a window and tightens it
+      /// as full windows arrive and agree, so the number on its own says nothing about how much
+      /// signal is behind it. Never narrower than the frequency resolution of a single window: no
+      /// amount of agreement between windows beats the width of a bin.
+      uint8_t Uncertainty() const {
+        return uncertainty;
+      }
+
       void Reset(bool resetDaqBuffer);
       static constexpr int deltaTms = 100;
       // Daq dataLength: Must be power of 2
       static constexpr uint16_t dataLength = 64;
       static constexpr uint16_t spectrumLength = dataLength >> 1;
+      // Samples behind the first, coarse estimate. Half a window, zero padded to the full length so
+      // that the bin spacing, the region of interest and the peak search stay the ones the full
+      // window uses. It buys a number in half the time, at twice the uncertainty.
+      static constexpr uint16_t earlyDataLength = dataLength >> 1;
 
     private:
       // The sampling frequency (Hz) based on sampling time in milliseconds (DeltaTms)
@@ -55,6 +71,14 @@ namespace Pinetime {
       // ALS detection factor
       static constexpr float alsFactor = 2.0f;
 
+      // Half the frequency resolution of a window of `length` samples, in bpm, rounded up: the
+      // closest a single window can pin a heart rate down.
+      // Note: HeartRateController::convergedUncertainty is chosen against these, so that a reading
+      // from a half window never passes for a settled one.
+      static constexpr uint8_t ResolutionBpm(uint16_t length) {
+        return static_cast<uint8_t>((sampleFreq / static_cast<float>(length)) * 60.0f / 2.0f + 0.999f);
+      }
+
       // Raw ADC data
       std::array<uint16_t, dataLength> dataHRS;
       // Stores Real numbers from FFT
@@ -74,8 +98,16 @@ namespace Pinetime {
       uint16_t dataIndex = 0;
       float peakLocation;
       bool resetSpectralAvg = true;
+      uint8_t uncertainty = 0;
+      // Spread (Hz) between the highest and the lowest reading behind the last average
+      float hrSpread = 0.0f;
+      // Whether this acquisition has had its coarse estimate. One per acquisition, no more.
+      bool earlyEstimateTaken = false;
 
       int ProcessHeartRate(bool init);
+      int EarlyHeartRate();
+      void ComputeSpectrum(uint16_t length);
+      float PeakFrequency(float maxWidth);
       float HeartRateAverage(float hr);
       void SpectrumAverage(const float* data, float* spectrum, int length, bool reset);
     };
