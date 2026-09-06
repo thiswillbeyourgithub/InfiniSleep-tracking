@@ -20,7 +20,7 @@ namespace Pinetime {
       HeartRateController() = default;
       void Start();
       void Stop();
-      void Update(States newState, uint8_t heartRate);
+      void Update(States newState, uint8_t heartRate, uint8_t uncertainty);
 
       void SetHeartRateTask(Applications::HeartRateTask* task);
 
@@ -30,6 +30,28 @@ namespace Pinetime {
 
       uint8_t HeartRate() const {
         return heartRate;
+      }
+
+      /// Half width in bpm of the spread of the readings behind HeartRate(), or 0 when there is no
+      /// reading.
+      ///
+      /// A measurement publishes a coarse estimate off half a window a few seconds in and tightens
+      /// it as full windows arrive and agree, so the number on its own says nothing about how much
+      /// signal is behind it. See Ppg::Uncertainty.
+      uint8_t Uncertainty() const {
+        return uncertainty;
+      }
+
+      /// Whether the reading is settled enough to stand on its own, rather than being shown as a
+      /// range and kept out of the activity log.
+      ///
+      /// The bound sits just under what half a window can resolve (Ppg::earlyDataLength, 10 bpm at
+      /// the current window lengths), so a coarse estimate never passes for a settled reading, and a
+      /// full window reading only passes while the recent windows behind it agree.
+      static constexpr uint8_t convergedUncertainty = 9;
+
+      bool IsConverged() const {
+        return heartRate > 0 && uncertainty > 0 && uncertainty <= convergedUncertainty;
       }
 
       void SetService(Pinetime::Controllers::HeartRateService* service);
@@ -53,6 +75,7 @@ namespace Pinetime {
       Applications::HeartRateTask* task = nullptr;
       States state = States::Stopped;
       uint8_t heartRate = 0;
+      uint8_t uncertainty = 0;
       bool bleNotificationsEnabled = true;
       Pinetime::Controllers::HeartRateService* service = nullptr;
     };

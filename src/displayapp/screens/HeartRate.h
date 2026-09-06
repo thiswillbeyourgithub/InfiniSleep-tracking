@@ -45,7 +45,7 @@ namespace Pinetime {
 
         static constexpr TickType_t logInterval = pdMS_TO_TICKS(60 * 1000);
         /// When the reading was last logged, and whether this run has been logged at all: the first
-        /// reading of a run goes out immediately, since that is the one the wearer waited for.
+        /// settled reading of a run goes out immediately, since that is the one the wearer waited for.
         TickType_t lastLogTicks = 0;
         bool loggedThisRun = false;
       };

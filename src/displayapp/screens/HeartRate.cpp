@@ -91,11 +91,26 @@ void HeartRate::Refresh() {
       }
   }
 
-  if (state == Controllers::HeartRateController::States::Running && heartRateController.HeartRate() > 0) {
+  // Only a reading the windows behind it agree on is worth keeping. The first one lands a few
+  // seconds in off half a window and is a range, not a number.
+  if (state == Controllers::HeartRateController::States::Running && heartRateController.IsConverged()) {
     LogReading();
   }
 
-  lv_label_set_text_static(label_status, ToString(state));
+  if (state == Controllers::HeartRateController::States::Running && heartRateController.HeartRate() > 0 &&
+      !heartRateController.IsConverged()) {
+    // Still converging, so show how wide the estimate is instead of letting the big number claim
+    // more than it knows.
+    const int heartRate = heartRateController.HeartRate();
+    const int uncertainty = heartRateController.Uncertainty();
+    lv_label_set_text_fmt(label_status,
+                          "%s\n%d to %d bpm",
+                          ToString(state),
+                          heartRate > uncertainty ? heartRate - uncertainty : 0,
+                          heartRate + uncertainty);
+  } else {
+    lv_label_set_text_static(label_status, ToString(state));
+  }
   lv_obj_align(label_status, label_hr, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 }
 

@@ -86,16 +86,16 @@ void HeartRateTask::Work() {
         ppg.Reset(false);
         // Set HR to zero and update
         bpm = 0;
-        controller.Update(Controllers::HeartRateController::States::Running, bpm);
+        controller.Update(Controllers::HeartRateController::States::Running, bpm, 0);
       }
 
       if (lastBpm == 0 && bpm == 0) {
-        controller.Update(Controllers::HeartRateController::States::NotEnoughData, bpm);
+        controller.Update(Controllers::HeartRateController::States::NotEnoughData, bpm, 0);
       }
 
       if (bpm != 0) {
         lastBpm = bpm;
-        controller.Update(Controllers::HeartRateController::States::Running, lastBpm);
+        controller.Update(Controllers::HeartRateController::States::Running, lastBpm, ppg.Uncertainty());
       }
     }
   }

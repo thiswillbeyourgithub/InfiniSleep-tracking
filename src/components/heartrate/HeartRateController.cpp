@@ -4,8 +4,9 @@
 
 using namespace Pinetime::Controllers;
 
-void HeartRateController::Update(HeartRateController::States newState, uint8_t heartRate) {
+void HeartRateController::Update(HeartRateController::States newState, uint8_t heartRate, uint8_t uncertainty) {
   this->state = newState;
+  this->uncertainty = uncertainty;
   if (this->heartRate != heartRate) {
     this->heartRate = heartRate;
     if (bleNotificationsEnabled) {
@@ -17,6 +18,9 @@ void HeartRateController::Update(HeartRateController::States newState, uint8_t h
 void HeartRateController::Start() {
   if (task != nullptr) {
     state = States::NotEnoughData;
+    // Whatever the last run left behind is not this run's reading, and must not be taken for one
+    // before the sensor has said anything.
+    uncertainty = 0;
     task->PushMessage(Pinetime::Applications::HeartRateTask::Messages::StartMeasurement);
   }
 }
