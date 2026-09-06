@@ -34,7 +34,9 @@ It builds on two upstream efforts, neither of which is merged:
 - A BLE service, `00060000-78fc-48fe-8e23-433b3a1942d0`, that hands the records over in batches and only reclaims the space once the host says it stored them.
 - Both sampling rates as settings, on a new Sensors page in the Sleep app.
 - Heart rate measured on a timer outside any sleep session, every 5, 15, 30 or 60 minutes, set from a new entry in the settings menu and off by default. It stands down while the sleep tracker runs, and with the screen on it records whatever the heart rate app is measuring rather than starting a measurement of its own, so it never takes the sensor from the wearer. A measurement left running in the app also survives the night now: the poll wakes the sensor for its reading and hands it back instead of ending it.
-- Every reading a manual heart rate check produces logged as well, marked awake, so the one measurement the wearer actually asked for is collected like the rest instead of only appearing on screen.
+- Every settled reading a manual heart rate check produces logged as well, marked awake, so the one measurement the wearer actually asked for is collected like the rest instead of only appearing on screen.
+- A heart rate in about three seconds rather than six and a half, estimated off half a sample window and refined as full windows arrive, with the spread shown under the number in the heart rate app until the windows agree on it. Upstream cannot say anything at all before a full window is in.
+- One upstream bug behind part of that wait, and behind measurements that never converged at all: the check that rejects a window left with a baseline residual compared it against a fixed number, while every magnitude in the spectrum scales with how strong the pulse is. A pulse above roughly 60 ADC counts was therefore thrown away at every heart rate, however long the wearer waited. Both the fix and the early estimate are measured on the host against a synthetic pulse rather than on a wrist with a stopwatch.
 - Watch faces that show only figures they can stand behind: `?` rather than a heart rate of `0` while the sensor has not converged or sees no skin, and no step count at all when nothing is counting steps.
 - Awake time told apart from sleep within a session. A button press or a wake gesture during the night marks the next 15 minutes awake, and the 5 minutes before it, since waking is not instantaneous. Two of them within half an hour mark the whole stretch between. A wrist raise deliberately does not count, because rolling over triggers it.
 - A marks page, reachable by swiping up from the tracking page while a session runs, with a **Not asleep yet** button. It rewrites everything since the session started as awake, for the night that begins with an hour of reading in bed.
@@ -86,6 +88,7 @@ One warning specific to this tree: an incremental build can miss a header change
 
 ```bash
 tests/activity/run.sh          # activity log tests, on the host: no hardware, no docker
+tests/heartrate/run.sh         # heart rate latency and accuracy, likewise, on a synthetic pulse
 ```
 
 ## Commits in this fork
@@ -119,6 +122,9 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 30ab9f09 fix(activity): stop a background poll from killing a manual measurement
 - 0765c1d6 feat(activity): log the readings a manual heart rate check produces
 - 43d0f260 chore(apps): put the sleep app before steps in the app list
+- 44fc01be fix(heartrate): compare the DC residual to the peak, not to a fixed number
+- e71ea2ad perf(heartrate): show a coarse reading off half a window, then refine it
+- ddc31cd5 feat(heartrate): show the reading as a range until it settles
 
 Plus the commits that write this list, which cannot list their own hash, and the odd formatting or gitignore commit not worth a line.
 
