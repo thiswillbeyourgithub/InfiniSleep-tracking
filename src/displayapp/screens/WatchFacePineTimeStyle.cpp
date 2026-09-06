@@ -26,6 +26,7 @@
 #include "displayapp/screens/BatteryIcon.h"
 #include "displayapp/screens/BleIcon.h"
 #include "displayapp/screens/NotificationIcon.h"
+#include "displayapp/screens/SensorDisplay.h"
 #include "displayapp/screens/Symbols.h"
 #include "displayapp/screens/WeatherSymbols.h"
 #include "components/battery/BatteryController.h"
@@ -258,6 +259,16 @@ WatchFacePineTimeStyle::WatchFacePineTimeStyle(Controllers::DateTime& dateTimeCo
     lv_obj_set_hidden(timeDD3, false);
   } else {
     lv_obj_set_hidden(timeDD3, true);
+  }
+
+  if (!StepsShown(settingsController, motionController)) {
+    // The sidebar shows a gauge, a count or the seconds, and the first two are a step figure this
+    // watch cannot stand behind, so the seconds get the corner whatever the saved style says. The
+    // style itself is left alone: it is the user's choice for when steps come back.
+    lv_obj_set_hidden(stepGauge, true);
+    lv_obj_set_hidden(stepValue, true);
+    lv_obj_set_hidden(stepIcon, true);
+    lv_obj_set_hidden(timeDD3, false);
   }
 
   btnNextTime = lv_btn_create(lv_scr_act(), nullptr);
@@ -528,7 +539,7 @@ void WatchFacePineTimeStyle::Refresh() {
   }
 
   stepCount = motionController.NbSteps();
-  if (stepCount.IsUpdated()) {
+  if (stepCount.IsUpdated() && StepsShown(settingsController, motionController)) {
     lv_gauge_set_value(stepGauge, 0, (stepCount.Get() / (settingsController.GetStepsGoal() / 100)) % 100);
     lv_obj_realign(stepGauge);
     lv_label_set_text_fmt(stepValue, "%luK", (stepCount.Get() / 1000));
@@ -749,7 +760,9 @@ void WatchFacePineTimeStyle::UpdateSelected(lv_obj_t* object, lv_event_t event) 
     if (object == btnSetOpts) {
       lv_obj_set_hidden(btnSetColor, true);
       lv_obj_set_hidden(btnSetOpts, true);
-      lv_obj_set_hidden(btnSteps, false);
+      // No steps to style, so the button that cycles between the gauge and the count stays away
+      // rather than offering a choice between two empty corners.
+      lv_obj_set_hidden(btnSteps, !StepsShown(settingsController, motionController));
       lv_obj_set_hidden(btnWeather, false);
       lv_obj_set_hidden(btnClose, false);
     }

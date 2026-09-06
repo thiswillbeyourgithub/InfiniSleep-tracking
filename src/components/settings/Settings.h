@@ -301,6 +301,22 @@ namespace Pinetime {
         return settings.stepsGoal;
       };
 
+      /// Whether the watch reports a step count at all.
+      ///
+      /// On rather than a preference nobody set: a watch with a working accelerometer counts steps
+      /// and there is no reason to hide them. Off means the screens that would show a figure show
+      /// nothing, which is the honest answer for a wearer who does not want one.
+      void SetStepsEnabled(bool enabled) {
+        if (enabled != settings.stepsEnabled) {
+          settingsChanged = true;
+        }
+        settings.stepsEnabled = enabled;
+      };
+
+      bool GetStepsEnabled() const {
+        return settings.stepsEnabled;
+      };
+
       /// How often the watch measures heart rate on its own while the screen is off, in minutes.
       /// Zero means never, which is the default: a watch should not turn its sensor on all day
       /// unless the wearer asked it to.
@@ -326,9 +342,14 @@ namespace Pinetime {
     private:
       Pinetime::Controllers::FS& fs;
 
-      // Bumped from 0x0009 for heartRatePollInterval. The file is discarded when the version
-      // does not match, so every watch setting goes back to its default once after an update.
-      static constexpr uint32_t settingsVersion = 0x000a;
+      // Bumped from 0x000a for stepsEnabled. The file is discarded when the version does not
+      // match, so every watch setting goes back to its default once after an update.
+      //
+      // Appending a field without bumping, the way InfiniSleepSettings does it, is not safe here.
+      // One more byte lands inside the padding the struct already has, and the firmware that wrote
+      // the file put indeterminate bytes there, so a new flag would read back as whatever happened
+      // to be in RAM. One reset is better than a setting that turns itself off.
+      static constexpr uint32_t settingsVersion = 0x000b;
 
       struct SettingsData {
         uint32_t version = settingsVersion;
@@ -336,6 +357,7 @@ namespace Pinetime {
         uint32_t screenTimeOut = 15000;
 
         bool alwaysOnDisplay = false;
+        bool stepsEnabled = true;
 
         ClockType clockType = ClockType::H24;
         WeatherFormat weatherFormat = WeatherFormat::Metric;

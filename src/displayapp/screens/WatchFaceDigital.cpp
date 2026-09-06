@@ -4,6 +4,7 @@
 #include <cstdio>
 
 #include "displayapp/screens/NotificationIcon.h"
+#include "displayapp/screens/SensorDisplay.h"
 #include "displayapp/screens/Symbols.h"
 #include "displayapp/screens/WeatherSymbols.h"
 #include "components/battery/BatteryController.h"
@@ -85,6 +86,11 @@ WatchFaceDigital::WatchFaceDigital(Controllers::DateTime& dateTimeController,
   lv_obj_set_style_local_text_color(stepIcon, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x00FFE7));
   lv_label_set_text_static(stepIcon, Symbols::shoe);
   lv_obj_align(stepIcon, stepValue, LV_ALIGN_OUT_LEFT_MID, -5, 0);
+
+  if (!StepsShown(settingsController, motionController)) {
+    lv_obj_set_hidden(stepValue, true);
+    lv_obj_set_hidden(stepIcon, true);
+  }
 
   taskRefresh = lv_task_create(RefreshTaskCallback, LV_DISP_DEF_REFR_PERIOD, LV_TASK_PRIO_MID, this);
   Refresh();

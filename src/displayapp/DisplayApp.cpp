@@ -650,7 +650,7 @@ void DisplayApp::LoadScreen(Apps app, DisplayApp::FullRefreshDirections directio
       currentScreen = std::make_unique<Screens::SettingDisplay>(settingsController);
       break;
     case Apps::SettingSteps:
-      currentScreen = std::make_unique<Screens::SettingSteps>(settingsController);
+      currentScreen = std::make_unique<Screens::SettingSteps>(settingsController, motionController);
       break;
     case Apps::SettingSetDateTime:
       currentScreen = std::make_unique<Screens::SettingSetDateTime>(this, dateTimeController, settingsController);

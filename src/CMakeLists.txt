@@ -398,6 +398,7 @@ list(APPEND SOURCE_FILES
         displayapp/screens/Error.cpp
         displayapp/screens/Alarm.cpp
         displayapp/screens/Sleep.cpp
+        displayapp/screens/SensorDisplay.cpp
         displayapp/screens/Styles.cpp
         displayapp/screens/WeatherSymbols.cpp
         displayapp/Colors.cpp
@@ -679,6 +680,7 @@ set(INCLUDE_FILES
         systemtask/SystemTask.h
         systemtask/SystemMonitor.h
         systemtask/WakeLock.h
+        displayapp/screens/SensorDisplay.h
         displayapp/screens/Symbols.h
         drivers/TwiMaster.h
         heartratetask/HeartRateTask.h

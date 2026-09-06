@@ -13,7 +13,9 @@ namespace {
   }
 }
 
-SettingSteps::SettingSteps(Pinetime::Controllers::Settings& settingsController) : settingsController {settingsController} {
+SettingSteps::SettingSteps(Pinetime::Controllers::Settings& settingsController,
+                           Pinetime::Controllers::MotionController& motionController)
+  : settingsController {settingsController}, motionController {motionController} {
 
   lv_obj_t* container1 = lv_cont_create(lv_scr_act(), nullptr);
 
@@ -44,6 +46,19 @@ SettingSteps::SettingSteps(Pinetime::Controllers::Settings& settingsController) 
   lv_label_set_align(stepValue, LV_LABEL_ALIGN_CENTER);
   lv_obj_align(stepValue, lv_scr_act(), LV_ALIGN_CENTER, 0, -20);
 
+  btnTracking = lv_btn_create(lv_scr_act(), nullptr);
+  btnTracking->user_data = this;
+  lv_obj_set_size(btnTracking, LV_HOR_RES - 20, 36);
+  lv_obj_align(btnTracking, lv_scr_act(), LV_ALIGN_CENTER, 0, 38);
+  lv_obj_set_style_local_bg_color(btnTracking, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, Colors::bgAlt);
+  lv_obj_set_event_cb(btnTracking, event_handler);
+  lblTracking = lv_label_create(btnTracking, nullptr);
+  UpdateTrackingLabel();
+  if (motionController.DeviceType() == Controllers::MotionController::DeviceTypes::Unknown) {
+    lv_obj_set_state(btnTracking, LV_STATE_DISABLED);
+    lv_obj_set_state(lblTracking, LV_STATE_DISABLED);
+  }
+
   static constexpr uint8_t btnWidth = 115;
   static constexpr uint8_t btnHeight = 80;
 
@@ -73,7 +88,27 @@ SettingSteps::~SettingSteps() {
   settingsController.SaveSettings();
 }
 
+void SettingSteps::UpdateTrackingLabel() {
+  if (motionController.DeviceType() == Controllers::MotionController::DeviceTypes::Unknown) {
+    // Nothing here to turn on or off: no accelerometer answered at boot, so the watch faces show no
+    // steps whatever this page says, and saying so beats a switch that changes nothing.
+    lv_label_set_text_static(lblTracking, "Steps: no sensor");
+  } else if (settingsController.GetStepsEnabled()) {
+    lv_label_set_text_static(lblTracking, "Steps: on");
+  } else {
+    lv_label_set_text_static(lblTracking, "Steps: off");
+  }
+}
+
 void SettingSteps::UpdateSelected(lv_obj_t* object, lv_event_t event) {
+  if (object == btnTracking) {
+    if (event == LV_EVENT_CLICKED && motionController.DeviceType() != Controllers::MotionController::DeviceTypes::Unknown) {
+      settingsController.SetStepsEnabled(!settingsController.GetStepsEnabled());
+      UpdateTrackingLabel();
+    }
+    return;
+  }
+
   uint32_t value = settingsController.GetStepsGoal();
 
   int valueChange = 0;

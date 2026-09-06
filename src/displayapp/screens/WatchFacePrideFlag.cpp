@@ -2,6 +2,7 @@
 #include <lvgl/lvgl.h>
 #include "components/battery/BatteryController.h"
 #include "components/ble/BleController.h"
+#include "displayapp/screens/SensorDisplay.h"
 #include "displayapp/screens/Symbols.h"
 
 using namespace Pinetime::Applications::Screens;
@@ -160,6 +161,7 @@ WatchFacePrideFlag::WatchFacePrideFlag(Controllers::DateTime& dateTimeController
   lv_obj_align(stepValue, lv_scr_act(), LV_ALIGN_CENTER, 0, 96);
   lv_label_set_align(stepValue, LV_LABEL_ALIGN_CENTER);
   lv_obj_set_auto_realign(stepValue, true);
+  lv_obj_set_hidden(stepValue, !StepsShown(settingsController, motionController));
 
   UpdateScreen(settingsController.GetPrideFlag());
 
