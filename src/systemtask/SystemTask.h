@@ -232,6 +232,10 @@ namespace Pinetime {
       /// True when this class turned the sensor on and therefore owes it a turn off. Never set
       /// while the watch is awake, where the user's own measurement must not be interfered with.
       bool activityEpochOwnsHeartRate = false;
+      /// True when the epoch in flight started the measurement rather than resuming one the wearer
+      /// left running in the heart rate app. Only such an epoch may end it: the wearer's own
+      /// measurement is theirs to stop, and this class merely reads its value in passing.
+      bool activityEpochStartedMeasurement = false;
       /// What the epoch in flight will be recorded as, and whether it asked for a heart rate.
       /// Held here because the epoch is closed by a message from a timer, several hundred
       /// milliseconds after the caller that started it has returned.
@@ -239,7 +243,8 @@ namespace Pinetime {
       bool activityEpochWantsHeartRate = false;
 
       /// Measures heart rate on its own schedule, outside any sleep session, when the wearer
-      /// asked for it in the settings. Does nothing while the tracker runs or the screen is on.
+      /// asked for it in the settings. Does nothing while the tracker runs, and with the screen on
+      /// it records what the heart rate app is measuring rather than measuring anything itself.
       void PollHeartRate();
       /// Starts, stops or repitches the poll timer to match the setting. Cheap and idempotent:
       /// it returns immediately unless the interval actually changed.

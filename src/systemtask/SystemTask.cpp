@@ -661,10 +661,19 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
     return;
   }
 
+  // A measurement the wearer started in the heart rate app and never stopped is still theirs. The
+  // task keeps it across GoToSleep and resumes it on the next WakeUp, and the controller reads
+  // anything but Stopped for exactly that stretch, so the sensor is woken here without restarting
+  // the measurement, and the epoch below leaves it standing instead of ending it. Ending it is what
+  // used to kill a manual check and leave the watch face on its last value for the rest of the day.
+  activityEpochStartedMeasurement = heartRateController.State() == Controllers::HeartRateController::States::Stopped;
+
   activityEpochMeasuring = true;
   activityEpochOwnsHeartRate = true;
   heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::WakeUp);
-  heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::StartMeasurement);
+  if (activityEpochStartedMeasurement) {
+    heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::StartMeasurement);
+  }
   xTimerStart(heartRateSettleTimer, 0);
 }
 
@@ -702,10 +711,11 @@ void SystemTask::PollHeartRate() {
     return;
   }
 
-  // Only with the screen off. Awake, the sensor belongs to whoever opened the heart rate app,
-  // and a measurement started behind their back would either be stopped by theirs or stop it.
-  // Skipping costs one sample: the timer is periodic and the next one is along shortly.
-  if (state != SystemTaskState::Sleeping) {
+  // With the screen on the sensor belongs to whoever opened the heart rate app. If they have a
+  // measurement running, that reading is the sample: it is fresher than anything a second
+  // measurement started behind their back could produce, and starting one would stop theirs. With
+  // nothing running, skip; the timer is periodic and the next one is along shortly.
+  if (state != SystemTaskState::Sleeping && heartRateController.State() == Controllers::HeartRateController::States::Stopped) {
     return;
   }
 
@@ -830,7 +840,14 @@ void SystemTask::RecordActivityEpoch() {
     // during the settle window, in which case the heart rate app may now be driving the sensor
     // itself and stopping it here would kill a measurement they are watching.
     if (state == SystemTaskState::Sleeping) {
-      heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::StopMeasurement);
+      if (activityEpochStartedMeasurement) {
+        // Through the controller rather than straight at the task, so that its state reads Stopped
+        // as well. Left saying otherwise, a watch face goes on showing the last reading, or the 0 of
+        // a measurement that never converged, until the next poll hours later.
+        heartRateController.Stop();
+      }
+      // GoToSleep either way: it powers the sensor down without clearing the measurement the wearer
+      // started, so theirs picks up again the next time the watch wakes.
       heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::GoToSleep);
     }
     activityEpochOwnsHeartRate = false;
