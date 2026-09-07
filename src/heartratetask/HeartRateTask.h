@@ -24,6 +24,17 @@ namespace Pinetime {
       void Work();
       void PushMessage(Messages msg);
 
+      /// Whether a measurement is running, meaning the sensor is powered and the loop is feeding
+      /// samples to Ppg, or would be again on the next WakeUp.
+      ///
+      /// This is the only honest answer to "is the sensor already taken". HeartRateController's
+      /// state cannot stand in for it: the task writes that state from its sample loop, so a
+      /// measurement that has just been stopped can leave it reading Running for one more cycle,
+      /// long after the flag below has gone false.
+      bool IsMeasuring() const {
+        return measurementStarted;
+      }
+
     private:
       static void Process(void* instance);
       void StartMeasurement();

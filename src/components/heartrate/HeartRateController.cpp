@@ -5,6 +5,16 @@
 using namespace Pinetime::Controllers;
 
 void HeartRateController::Update(HeartRateController::States newState, uint8_t heartRate, uint8_t uncertainty) {
+  // Stopped means nobody has a measurement running, so this sample belongs to one that has already
+  // ended: the heart rate task reads the sensor on its own schedule and can finish a cycle after
+  // Stop() has been called but before it has taken the message off its queue. Letting that through
+  // puts the state back to Running behind the back of whoever stopped it, which leaves a watch face
+  // showing the reading for hours and, worse, leaves anything asking the controller who owns the
+  // sensor with a permanently wrong answer.
+  if (state == States::Stopped) {
+    return;
+  }
+
   this->state = newState;
   this->uncertainty = uncertainty;
   if (this->heartRate != heartRate) {

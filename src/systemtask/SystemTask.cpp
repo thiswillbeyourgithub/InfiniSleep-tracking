@@ -665,17 +665,25 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
   }
 
   // A measurement the wearer started in the heart rate app and never stopped is still theirs. The
-  // task keeps it across GoToSleep and resumes it on the next WakeUp, and the controller reads
-  // anything but Stopped for exactly that stretch, so the sensor is woken here without restarting
-  // the measurement, and the epoch below leaves it standing instead of ending it. Ending it is what
-  // used to kill a manual check and leave the watch face on its last value for the rest of the day.
-  activityEpochStartedMeasurement = heartRateController.State() == Controllers::HeartRateController::States::Stopped;
+  // task keeps it across GoToSleep and resumes it on the next WakeUp, so the sensor is woken here
+  // without restarting the measurement, and the epoch below leaves it standing instead of ending
+  // it. Ending it is what used to kill a manual check and leave the watch face on its last value
+  // for the rest of the day.
+  //
+  // Asked of the task rather than of HeartRateController, because the controller's state is not a
+  // record of who owns the sensor. The task writes it from the sample loop, so a Stop() can be
+  // followed by one more Update() from a sample already in flight, leaving the controller reading
+  // NotEnoughData while the task has no measurement at all. Read as ownership that says "someone
+  // else is measuring" forever, and every epoch after it skips the measurement it exists to take.
+  activityEpochStartedMeasurement = !heartRateApp.IsMeasuring();
 
   activityEpochMeasuring = true;
   activityEpochOwnsHeartRate = true;
   heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::WakeUp);
   if (activityEpochStartedMeasurement) {
-    heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::StartMeasurement);
+    // Through the controller, so that its state describes this measurement from the start rather
+    // than keeping whatever the last one left there. The task ignores a second start anyway.
+    heartRateController.Start();
   }
   xTimerStart(heartRateSettleTimer, 0);
 }
@@ -718,7 +726,7 @@ void SystemTask::PollHeartRate() {
   // measurement running, that reading is the sample: it is fresher than anything a second
   // measurement started behind their back could produce, and starting one would stop theirs. With
   // nothing running, skip; the timer is periodic and the next one is along shortly.
-  if (state != SystemTaskState::Sleeping && heartRateController.State() == Controllers::HeartRateController::States::Stopped) {
+  if (state != SystemTaskState::Sleeping && !heartRateApp.IsMeasuring()) {
     return;
   }
 
