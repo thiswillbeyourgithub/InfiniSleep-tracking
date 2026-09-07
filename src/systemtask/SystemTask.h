@@ -93,6 +93,18 @@ namespace Pinetime {
         return state != SystemTaskState::Running;
       }
 
+      /// Whether the screen has gone down, which is when the sensors are the watch's own to take.
+      ///
+      /// AODSleeping counts. An always on display is one the wearer is not looking at, and it
+      /// changes nothing about who owns the heart rate sensor. Testing for Sleeping alone is what
+      /// left a watch with that setting measuring no heart rate at all, night or day.
+      ///
+      /// Narrower than IsSleeping, which also covers GoingToSleep, the moment while the display is
+      /// still on its way down and the wearer has only just looked away.
+      bool IsScreenAsleep() const {
+        return state == SystemTaskState::Sleeping || state == SystemTaskState::AODSleeping;
+      }
+
     private:
       TaskHandle_t taskHandle;
 

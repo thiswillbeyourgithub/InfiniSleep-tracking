@@ -657,7 +657,7 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
   // safe, and also the only case where it would otherwise report nothing all night.
   // No timer means no way to wait for the sensor, so record what is already known rather than
   // handing FreeRTOS a null handle.
-  const bool shouldMeasure = wantsHeartRate && state == SystemTaskState::Sleeping && heartRateSettleTimer != nullptr;
+  const bool shouldMeasure = wantsHeartRate && IsScreenAsleep() && heartRateSettleTimer != nullptr;
 
   if (!shouldMeasure) {
     RecordActivityEpoch();
@@ -726,7 +726,7 @@ void SystemTask::PollHeartRate() {
   // measurement running, that reading is the sample: it is fresher than anything a second
   // measurement started behind their back could produce, and starting one would stop theirs. With
   // nothing running, skip; the timer is periodic and the next one is along shortly.
-  if (state != SystemTaskState::Sleeping && !heartRateApp.IsMeasuring()) {
+  if (!IsScreenAsleep() && !heartRateApp.IsMeasuring()) {
     return;
   }
 
@@ -877,7 +877,7 @@ void SystemTask::RecordActivityEpoch() {
     // Only hand the sensor back if the watch is still asleep. The user may have picked it up
     // during the settle window, in which case the heart rate app may now be driving the sensor
     // itself and stopping it here would kill a measurement they are watching.
-    if (state == SystemTaskState::Sleeping) {
+    if (IsScreenAsleep()) {
       if (activityEpochStartedMeasurement) {
         // Through the controller rather than straight at the task, so that its state reads Stopped
         // as well. Left saying otherwise, a watch face goes on showing the last reading, or the 0 of
