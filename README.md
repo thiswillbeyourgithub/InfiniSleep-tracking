@@ -2,7 +2,7 @@
 
 A personal fork of [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime), the open source firmware for the [PineTime](https://pine64.org/devices/pinetime/), with one goal: make the watch record sleep on its own and hand the recording to a companion app afterwards.
 
-The work lives on the `infinisleep-health` branch. The other half is [Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), the companion app that collects what this firmware records. Neither half is useful without the other.
+The work lives on the `infinisleep-health` branch. A [Pomodoro app](#pomodoro-app) ported from wasp-os rides along, unrelated to the sleep work and described further down. The other half is [Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), the companion app that collects what this firmware records. Neither half is useful without the other.
 
 ## Ready to install, no toolchain needed
 
@@ -66,6 +66,27 @@ There is no need to uninstall the Gadgetbridge you already have. The fork builds
 adb install -r app/build/outputs/apk/mainline/nopebble/*.apk
 ```
 
+## Pomodoro app
+
+A port of the [Pomodoro application](https://wasp-os.readthedocs.io/en/latest/apps.html#pomodoro-application) from wasp-os, written by the same author as [SleepTk](https://github.com/thiswillbeyourgithub/SleepTk_pinetime_sleep_tracker), the wasp-os sleep tracker that the InfiniSleep work above ultimately descends from. Nothing in it touches sleep tracking. It is simply an app this watch was missing.
+
+It runs a queue of timers that chain into each other. Type `25,5` and the watch counts down 25 minutes, vibrates, counts down 5, vibrates, and starts over, until it is stopped or 99 rounds have passed. The Timer app in stock InfiniTime runs one countdown once.
+
+- Queues are typed on a keypad. `Then` chains one interval to the next, `Go` starts the queue.
+- Swipe left and right for presets, up and down for how many times each alert vibrates, once a second.
+- Alerts are randomised above three vibrations: sometimes one long buzz of varying strength, sometimes a burst of short random pulses. A pattern that changes every second is much harder to tune out than the same pulse over and over.
+- `+1` pushes the current interval one minute further out without touching the queue.
+- It keeps running in the background. Leave the app and the watch wakes itself and brings the app back when an interval elapses.
+- The queue and the vibration count are saved, so they survive a reboot.
+
+Two controls differ from wasp-os, both forced by the firmware. Swiping down changes the vibration count instead of leaving the app, so the side button is the way out of the keypad; and the side button skips an alert, which wasp-os gave no way to do short of waiting it out. The app icon is the clock glyph rather than the wasp-os tomato, because the icon font has no tomato in it.
+
+## Apps left out
+
+Paint, Paddle, Twos, Dice and the Metronome are not built into this firmware. They cost flash that the work above needed and none of them were being used. Navigation and Motion are left out upstream already, so nothing else is missing.
+
+The list is the commented block at the top of [src/displayapp/apps/CMakeLists.txt](src/displayapp/apps/CMakeLists.txt), one line per app. Note that `USERAPP_TYPES` is a cmake cache variable: a stale `build/CMakeCache.txt` keeps the old list, so changing which apps are built needs `build/` deleted first, not just a rebuild. Invoking cmake directly also accepts `-DENABLE_USERAPPS=...` to replace the whole list, though the docker image offers no way to pass it through.
+
 ## Building
 
 Unchanged from upstream, so the docker route from [doc/buildWithDocker.md](doc/buildWithDocker.md) works as it does there:
@@ -89,6 +110,7 @@ One warning specific to this tree: an incremental build can miss a header change
 ```bash
 tests/activity/run.sh          # activity log tests, on the host: no hardware, no docker
 tests/heartrate/run.sh         # heart rate latency and accuracy, likewise, on a synthetic pulse
+tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an hour in microseconds
 ```
 
 ## Commits in this fork
@@ -125,6 +147,9 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 44fc01be fix(heartrate): compare the DC residual to the peak, not to a fixed number
 - e71ea2ad perf(heartrate): show a coarse reading off half a window, then refine it
 - ddc31cd5 feat(heartrate): show the reading as a range until it settles
+- 2cffa95c test: share the host stubs between harnesses, and fake FreeRTOS timers
+- 55463e76 feat(pomodoro): add the controller behind a chained timer queue
+- bad42e93 feat(pomodoro): add the app screen and wire it into the launcher
 
 Plus the commits that write this list, which cannot list their own hash, and the odd formatting or gitignore commit not worth a line.
 
