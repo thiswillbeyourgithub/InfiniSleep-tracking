@@ -1,3 +1,0 @@
-#pragma once
-#define portMAX_DELAY 0xffffffffUL
-#define pdTRUE 1

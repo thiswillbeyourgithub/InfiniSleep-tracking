@@ -36,6 +36,9 @@ namespace Pinetime {
         file->pos = 0;
         if (flags & LFS_O_TRUNC) {
           contents.clear();
+        }
+        // Opening for writing is what brings a file into being, with or without a truncate.
+        if (flags & (LFS_O_WRONLY | LFS_O_CREAT)) {
           exists = true;
         }
         return LFS_ERR_OK;
@@ -50,8 +53,13 @@ namespace Pinetime {
       }
 
       int FileWrite(lfs_file_t* file, const uint8_t* in, uint32_t size) {
-        contents.insert(contents.end(), in, in + size);
-        file->pos = contents.size();
+        // Overwrites from the current offset and grows only as needed, as a real file does. An
+        // append is the same thing once the file has been truncated or is being created.
+        if (contents.size() < file->pos + size) {
+          contents.resize(file->pos + size);
+        }
+        std::memcpy(contents.data() + file->pos, in, size);
+        file->pos += size;
         return static_cast<int>(size);
       }
 
