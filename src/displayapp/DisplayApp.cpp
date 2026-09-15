@@ -70,6 +70,13 @@ namespace {
     auto* dispApp = static_cast<DisplayApp*>(pvTimerGetTimerID(xTimer));
     dispApp->PushMessage(Display::Messages::TimerDone);
   }
+
+  /* PomodoroController calls this from the FreeRTOS timer task when one of its intervals is up,
+   * so that the display task is the one that wakes the screen and switches to the app. */
+  void PomodoroAlertCallback(void* data) {
+    auto* dispApp = static_cast<DisplayApp*>(data);
+    dispApp->PushMessage(Display::Messages::PomodoroDone);
+  }
 }
 
 DisplayApp::DisplayApp(Drivers::St7789& lcd,
@@ -110,6 +117,7 @@ DisplayApp::DisplayApp(Drivers::St7789& lcd,
     activityLogController {activityLogController},
     lvgl {lcd, filesystem},
     timer(this, TimerCallback),
+    pomodoroController(filesystem, motorController, this, PomodoroAlertCallback),
     controllers {batteryController,
                  bleController,
                  dateTimeController,
@@ -119,6 +127,7 @@ DisplayApp::DisplayApp(Drivers::St7789& lcd,
                  motorController,
                  motionController,
                  alarmController,
+                 pomodoroController,
                  infiniSleepController,
                  activityLogController,
                  brightnessController,
@@ -134,6 +143,9 @@ DisplayApp::DisplayApp(Drivers::St7789& lcd,
 
 void DisplayApp::Start(System::BootErrors error) {
   msgQueue = xQueueCreate(queueSize, itemSize);
+
+  // Safe here and not in the constructor: SystemTask mounts the filesystem before starting us.
+  pomodoroController.Init();
 
   bootError = error;
 
@@ -388,6 +400,18 @@ void DisplayApp::Refresh() {
           LoadNewScreen(Apps::Timer, DisplayApp::FullRefreshDirections::Up);
         }
         motorController.RunForDuration(35);
+        break;
+      case Messages::PomodoroDone:
+        if (state != States::Running) {
+          PushMessageToSystemTask(System::Messages::GoToRunning);
+        }
+        /* Unlike TimerDone there is nothing to reset on the screen: the controller has already
+         * moved itself to Ringing, so the app only has to be on screen to show it. */
+        if (currentApp != Apps::Pomodoro) {
+          LoadNewScreen(Apps::Pomodoro, DisplayApp::FullRefreshDirections::Up);
+        } else {
+          lv_disp_trig_activity(nullptr);
+        }
         break;
       case Messages::AlarmTriggered:
         if (currentApp == Apps::Alarm) {

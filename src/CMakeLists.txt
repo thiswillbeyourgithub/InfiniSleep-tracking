@@ -393,6 +393,7 @@ list(APPEND SOURCE_FILES
         displayapp/screens/BatteryInfo.cpp
         displayapp/screens/Steps.cpp
         displayapp/screens/Timer.cpp
+        displayapp/screens/Pomodoro.cpp
         displayapp/screens/Dice.cpp
         displayapp/screens/PassKey.cpp
         displayapp/screens/Error.cpp
@@ -475,6 +476,7 @@ list(APPEND SOURCE_FILES
         components/settings/Settings.cpp
         components/timer/Timer.cpp
         components/alarm/AlarmController.cpp
+        components/pomodoro/PomodoroController.cpp
         components/infinisleep/InfiniSleepController.cpp
         components/fs/FS.cpp
         drivers/Cst816s.cpp
@@ -547,6 +549,7 @@ list(APPEND RECOVERY_SOURCE_FILES
         components/settings/Settings.cpp
         components/timer/Timer.cpp
         components/alarm/AlarmController.cpp
+        components/pomodoro/PomodoroController.cpp
         components/infinisleep/InfiniSleepController.cpp
         drivers/Cst816s.cpp
         FreeRTOS/port.c
