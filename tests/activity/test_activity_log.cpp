@@ -513,6 +513,7 @@ int main() {
     ActivityLogController wide(wideFs);
     wide.Init();
     CHECK(wide.Capacity() == wideSlots);
+    CHECK(!wide.IsDirty());  // loading a file is not a change to what it holds
     CHECK(wide.RecordCount() == 20);
     CHECK(ReadAll(wide).back().motion == 19 * 11);
   }

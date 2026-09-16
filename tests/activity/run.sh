@@ -18,6 +18,7 @@ out="${TMPDIR:-/tmp}/test_activity_log"
 ${CXX:-c++} -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined \
   -I "$here/../stubs" -I "$root/src" \
   "$here/test_activity_log.cpp" "$root/src/components/activity/ActivityLogController.cpp" \
+  "$root/src/components/log/CollectableLog.cpp" \
   -o "$out"
 
 "$out"
