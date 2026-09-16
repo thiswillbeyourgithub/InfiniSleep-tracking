@@ -176,6 +176,17 @@ namespace Pinetime {
       void MarkRead() const;
       void MarkCollected();
 
+      /// One number of the log's own, saved with the records and handed back when they are
+      /// loaded. The event log keeps its sequence counter here, since a host that acknowledges by
+      /// sequence would be talking about numbers the watch forgot over a reboot otherwise. A log
+      /// with nothing to keep leaves both alone.
+      virtual uint32_t ExtraToSave() const {
+        return 0;
+      }
+
+      virtual void ExtraLoaded(uint32_t) {
+      }
+
       /// Whether a record size read out of a file is one this log can hold, adopting it if so.
       /// Only a log with more than one layout has any reason to override this.
       virtual bool AdoptRecordSize(uint8_t size);

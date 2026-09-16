@@ -338,7 +338,7 @@ int main() {
       }
       log.Release(t0 + 5 * 300);  // so the ring is rotated when it is written out
       log.Flush();
-      CHECK(fs.contents.size() == 8 + 34 * 5);  // header plus 34 wide records
+      CHECK(fs.contents.size() == 12 + 34 * 5);  // header plus 34 wide records
     }
 
     ActivityLogController reloaded(fs);
@@ -358,7 +358,7 @@ int main() {
     printf("a file from an older firmware is discarded, not misread\n");
     FS fs;
     fs.exists = true;
-    fs.contents = {1, 8, 3, 0, 0, 0, 0, 0};  // version 1, 8 byte records
+    fs.contents = {1, 8, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0};  // version 1, 8 byte records
     ActivityLogController log(fs);
     log.Init();
     CHECK(log.RecordCount() == 0);
@@ -424,7 +424,7 @@ int main() {
     CHECK(intact);
 
     log.Flush();
-    CHECK(fs.contents.size() == 8u + narrowSlots * 3u);  // three bytes a record, not five
+    CHECK(fs.contents.size() == 12u + narrowSlots * 3u);  // three bytes a record, not five
   }
 
   {
@@ -558,10 +558,10 @@ int main() {
   }
 
   {
-    printf("a version 2 file, from before motion moved out of the record, is discarded\n");
+    printf("a file from before the header grew is discarded, not misread\n");
     FS fs;
     fs.exists = true;
-    fs.contents = {2, 6, 3, 0, 0, 0, 0, 0};  // version 2, 6 byte records
+    fs.contents = {3, 5, 3, 0, 0, 0, 0, 0};  // version 3, before the header grew
     ActivityLogController log(fs);
     log.Init();
     CHECK(log.RecordCount() == 0);

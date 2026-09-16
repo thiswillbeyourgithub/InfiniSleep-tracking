@@ -15,6 +15,7 @@ namespace {
     uint8_t recordSize;
     uint16_t count;
     uint32_t base;
+    uint32_t extra;
   };
 
   constexpr uint32_t secondsPerMinute = 60;
@@ -321,6 +322,7 @@ void CollectableLog::LoadFromFile() {
   head = 0;
   count = header.count;
   base = header.base;
+  ExtraLoaded(header.extra);
   NRF_LOG_INFO("[CollectableLog] Loaded %u records", count);
 }
 
@@ -341,7 +343,7 @@ void CollectableLog::SaveToFile() const {
     return;
   }
 
-  const FileHeader header {fileFormatVersion, recordSize, count, base};
+  const FileHeader header {fileFormatVersion, recordSize, count, base, ExtraToSave()};
   fs.FileWrite(&file, reinterpret_cast<const uint8_t*>(&header), sizeof(header));
 
   // Stored oldest first, so loading can drop the ring's rotation entirely. The ring wraps at most

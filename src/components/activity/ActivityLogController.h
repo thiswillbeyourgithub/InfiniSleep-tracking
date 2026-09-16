@@ -91,9 +91,10 @@ namespace Pinetime {
 
     private:
       /// Bumped whenever the stored layout changes. A file written by an older firmware is
-      /// discarded rather than misread. Version 3 is the byte layout above, version 2 was a 6 byte
-      /// packed record, version 1 whole ActivityRecords.
-      static constexpr uint8_t fileFormatVersion = 3;
+      /// discarded rather than misread. Version 4 added the field the shared log keeps for a log
+      /// of its own, which this one does not use; version 3 is the byte layout above; version 2 was
+      /// a 6 byte packed record and version 1 whole ActivityRecords.
+      static constexpr uint8_t fileFormatVersion = 4;
       static constexpr const char* filePath = "/.system/activity.dat";
 
       /// Expands one stored record. Valid for 0 <= offset < the count, and by value because there
