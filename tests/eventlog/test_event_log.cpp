@@ -313,6 +313,27 @@ int main() {
     CHECK(log.Add(Ev(t0 + 120)) == 3);
   }
 
+  {
+    printf("an event can be flagged after it was logged, until it is collected\n");
+    FS fs;
+    EventLogController log(fs);
+    log.Init();
+    const uint32_t first = log.Add(Ev(t0));
+    const uint32_t second = log.Add(Ev(t0 + 60, 5));
+    log.Flush();
+
+    CHECK(log.Flag(second));
+    CHECK(!ReadAll(log)[0].flagged);
+    CHECK(ReadAll(log)[1].flagged);
+    // Flagging is a change to the log like any other, so the file follows.
+    CHECK(log.IsDirty());
+
+    // Nothing to flag: never existed, and gone already.
+    CHECK(!log.Flag(99));
+    log.ReleaseEvents(second);
+    CHECK(!log.Flag(first));
+  }
+
   if (failures == 0) {
     printf("\nall checks passed\n");
     return 0;

@@ -94,6 +94,23 @@ bool EventLogController::IsRunning(uint8_t slot) const {
   return running;
 }
 
+bool EventLogController::Flag(uint32_t sequence) {
+  Lock();
+
+  bool found = false;
+  for (uint16_t offset = 0; offset < Count(); offset++) {
+    if (SequenceAt(offset) == sequence) {
+      Slot(offset)[3] |= flaggedBit;
+      MarkDirty();
+      found = true;
+      break;
+    }
+  }
+
+  Unlock();
+  return found;
+}
+
 uint16_t EventLogController::EventCount() const {
   return RecordCount();
 }

@@ -54,6 +54,14 @@ namespace Pinetime {
       /// deal: the log is the record, and what is running is a convenience derived from it.
       bool IsRunning(uint8_t slot) const;
 
+      /// Flags an event that is already stored, and says whether it was found.
+      ///
+      /// The app offers this right after logging something, because a tap that logs is one tap and
+      /// asking first would make it two. An event the host has already collected is gone from here,
+      /// so this answers false and the flag has to be set on the phone, which is where a flagged
+      /// event is dealt with anyway.
+      bool Flag(uint32_t sequence);
+
       uint16_t EventCount() const override;
       uint32_t NewestSequence() const override;
       uint32_t OldestSequence() const override;
