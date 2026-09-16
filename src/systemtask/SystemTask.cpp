@@ -64,7 +64,9 @@ SystemTask::SystemTask(Drivers::SpiMaster& spi,
                        Pinetime::Controllers::TouchHandler& touchHandler,
                        Pinetime::Controllers::ButtonHandler& buttonHandler,
                        Pinetime::Controllers::InfiniSleepController& infiniSleepController,
-                       Pinetime::Controllers::ActivityLogController& activityLogController)
+                       Pinetime::Controllers::ActivityLogController& activityLogController,
+                       Pinetime::Controllers::EventLogController& eventLogController,
+                       Pinetime::Controllers::LogSlots& logSlots)
   : spi {spi},
     spiNorFlash {spiNorFlash},
     twiMaster {twiMaster},
@@ -94,9 +96,13 @@ SystemTask::SystemTask(Drivers::SpiMaster& spi,
                      heartRateController,
                      motionController,
                      activityLogController,
+                     eventLogController,
+                     logSlots,
                      fs),
     infiniSleepController {infiniSleepController},
-    activityLogController {activityLogController} {
+    activityLogController {activityLogController},
+    eventLogController {eventLogController},
+    logSlots {logSlots} {
 }
 
 void SystemTask::Start() {
@@ -130,6 +136,8 @@ void SystemTask::Work() {
 
   // Before the BLE stack, which exposes the log to a host as soon as it is up.
   activityLogController.Init();
+  eventLogController.Init();
+  logSlots.Init();
 
   nimbleController.Init();
 
@@ -217,6 +225,10 @@ void SystemTask::Work() {
     // and the SPI peripheral disabled, so the ring in RAM is the authority and this mirrors it
     // whenever the watch happens to be awake. AODSleeping does not count: it keeps SPI alive
     // for the display but still sleeps the flash.
+    if (state == SystemTaskState::Running && eventLogController.IsDirty()) {
+      eventLogController.Flush();
+    }
+
     if (state == SystemTaskState::Running && activityLogController.IsDirty()) {
       activityLogController.Flush();
     }

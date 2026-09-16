@@ -470,6 +470,7 @@ list(APPEND SOURCE_FILES
         components/ble/HeartRateService.cpp
         components/ble/MotionService.cpp
         components/ble/ActivityLogService.cpp
+        components/ble/EventLogService.cpp
         components/activity/ActivityLogController.cpp
         components/log/CollectableLog.cpp
         components/log/EventLogController.cpp
@@ -548,6 +549,7 @@ list(APPEND RECOVERY_SOURCE_FILES
         components/ble/HeartRateService.cpp
         components/ble/MotionService.cpp
         components/ble/ActivityLogService.cpp
+        components/ble/EventLogService.cpp
         components/activity/ActivityLogController.cpp
         components/log/CollectableLog.cpp
         components/log/EventLogController.cpp
@@ -676,6 +678,7 @@ set(INCLUDE_FILES
         components/ble/HeartRateService.h
         components/ble/MotionService.h
         components/ble/ActivityLogService.h
+        components/ble/EventLogService.h
         components/activity/ActivityLog.h
         components/activity/ActivityLogController.h
         components/log/CollectableLog.h

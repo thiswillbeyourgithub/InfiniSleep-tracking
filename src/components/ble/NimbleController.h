@@ -23,6 +23,7 @@
 #include "components/ble/MotionService.h"
 #include "components/ble/SimpleWeatherService.h"
 #include "components/ble/ActivityLogService.h"
+#include "components/ble/EventLogService.h"
 #include "components/fs/FS.h"
 
 namespace Pinetime {
@@ -51,6 +52,8 @@ namespace Pinetime {
                        HeartRateController& heartRateController,
                        MotionController& motionController,
                        ActivityLogProvider& activityLogProvider,
+                       EventLogProvider& eventLogProvider,
+                       LogSlots& logSlots,
                        FS& fs);
       void Init();
       void StartAdvertising();
@@ -108,6 +111,7 @@ namespace Pinetime {
       HeartRateService heartRateService;
       MotionService motionService;
       ActivityLogService activityLogService;
+      EventLogService eventLogService;
       FSService fsService;
       ServiceDiscovery serviceDiscovery;
 

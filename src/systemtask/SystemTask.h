@@ -18,6 +18,8 @@
 #include "components/alarm/AlarmController.h"
 #include "components/infinisleep/InfiniSleepController.h"
 #include "components/activity/ActivityLogController.h"
+#include "components/log/EventLogController.h"
+#include "components/log/LogSlots.h"
 #include "components/fs/FS.h"
 #include "touchhandler/TouchHandler.h"
 #include "buttonhandler/ButtonHandler.h"
@@ -76,7 +78,9 @@ namespace Pinetime {
                  Pinetime::Controllers::TouchHandler& touchHandler,
                  Pinetime::Controllers::ButtonHandler& buttonHandler,
                  Pinetime::Controllers::InfiniSleepController& infiniSleepController,
-                 Pinetime::Controllers::ActivityLogController& activityLogController);
+                 Pinetime::Controllers::ActivityLogController& activityLogController,
+                 Pinetime::Controllers::EventLogController& eventLogController,
+                 Pinetime::Controllers::LogSlots& logSlots);
 
       void Start();
       void PushMessage(Messages msg);
@@ -134,6 +138,8 @@ namespace Pinetime {
       Pinetime::Controllers::NimbleController nimbleController;
       Pinetime::Controllers::InfiniSleepController& infiniSleepController;
       Pinetime::Controllers::ActivityLogController& activityLogController;
+      Pinetime::Controllers::EventLogController& eventLogController;
+      Pinetime::Controllers::LogSlots& logSlots;
 
       static void Process(void* instance);
       void Work();
