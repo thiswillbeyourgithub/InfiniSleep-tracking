@@ -394,12 +394,13 @@ void DisplayApp::Refresh() {
         }
         if (currentApp == Apps::Timer) {
           lv_disp_trig_activity(nullptr);
-          auto* timer = static_cast<Screens::Timer*>(currentScreen.get());
-          timer->Reset();
         } else {
           LoadNewScreen(Apps::Timer, DisplayApp::FullRefreshDirections::Up);
         }
-        motorController.RunForDuration(35);
+        /* The screen takes it from here, the way the alarm does: it rings until it is told to stop
+         * and shows the button that does so. A single buzz was easy to miss from a pocket, which is
+         * the whole point of setting a timer. */
+        static_cast<Screens::Timer*>(currentScreen.get())->SetAlerting();
         break;
       case Messages::PomodoroDone:
         if (state != States::Running) {

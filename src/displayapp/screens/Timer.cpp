@@ -6,6 +6,13 @@
 
 using namespace Pinetime::Applications::Screens;
 
+namespace {
+  /* How long the ringing goes on unanswered before it gives up, the same grace period the alarm
+   * allows itself. Long enough to be walked back to, short enough that a timer forgotten in a
+   * drawer does not empty the battery through the motor. */
+  constexpr uint32_t alertingTimeoutMs = 60 * 1000;
+}
+
 static void btnEventHandler(lv_obj_t* obj, lv_event_t event) {
   auto* screen = static_cast<Timer*>(obj->user_data);
   if (event == LV_EVENT_PRESSED) {
@@ -17,7 +24,13 @@ static void btnEventHandler(lv_obj_t* obj, lv_event_t event) {
   }
 }
 
-Timer::Timer(Controllers::Timer& timerController) : timer {timerController} {
+static void StopAlertingTaskCallback(lv_task_t* task) {
+  auto* screen = static_cast<Timer*>(task->user_data);
+  screen->StopAlerting();
+}
+
+Timer::Timer(Controllers::Timer& timerController, Controllers::MotorController& motorController, System::SystemTask& systemTask)
+  : timer {timerController}, motorController {motorController}, wakeLock(systemTask) {
 
   lv_obj_t* colonLabel = lv_label_create(lv_scr_act(), nullptr);
   lv_obj_set_style_local_text_font(colonLabel, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &jetbrains_mono_76);
@@ -72,6 +85,9 @@ Timer::Timer(Controllers::Timer& timerController) : timer {timerController} {
 }
 
 Timer::~Timer() {
+  if (alerting) {
+    StopAlerting();
+  }
   lv_task_del(taskRefresh);
   lv_obj_clean(lv_scr_act());
 }
@@ -85,7 +101,7 @@ void Timer::MaskReset() {
   buttonPressing = false;
   // A click event is processed before a release event,
   // so the release event would override the "Pause" text without this check
-  if (!timer.IsRunning()) {
+  if (!timer.IsRunning() && !alerting) {
     lv_label_set_text_static(txtPlayPause, "Start");
   }
   maskPosition = 0;
@@ -105,7 +121,7 @@ void Timer::UpdateMask() {
 void Timer::Refresh() {
   if (timer.IsRunning()) {
     DisplayTime();
-  } else if (buttonPressing && xTaskGetTickCount() > pressTime + pdMS_TO_TICKS(150)) {
+  } else if (!alerting && buttonPressing && xTaskGetTickCount() > pressTime + pdMS_TO_TICKS(150)) {
     lv_label_set_text_static(txtPlayPause, "Reset");
     maskPosition += 15;
     if (maskPosition > 240) {
@@ -138,7 +154,9 @@ void Timer::SetTimerStopped() {
 }
 
 void Timer::ToggleRunning() {
-  if (timer.IsRunning()) {
+  if (alerting) {
+    StopAlerting();
+  } else if (timer.IsRunning()) {
     DisplayTime();
     timer.StopTimer();
     SetTimerStopped();
@@ -153,4 +171,40 @@ void Timer::ToggleRunning() {
 void Timer::Reset() {
   DisplayTime();
   SetTimerStopped();
+}
+
+void Timer::SetAlerting() {
+  if (alerting) {
+    return;
+  }
+  alerting = true;
+  DisplayTime();
+  minuteCounter.HideControls();
+  secondCounter.HideControls();
+  lv_label_set_text_static(txtPlayPause, "Stop");
+  taskStopAlerting = lv_task_create(StopAlertingTaskCallback, pdMS_TO_TICKS(alertingTimeoutMs), LV_TASK_PRIO_MID, this);
+  motorController.StartRinging();
+  wakeLock.Lock();
+}
+
+void Timer::StopAlerting() {
+  if (!alerting) {
+    return;
+  }
+  alerting = false;
+  motorController.StopRinging();
+  if (taskStopAlerting != nullptr) {
+    lv_task_del(taskStopAlerting);
+    taskStopAlerting = nullptr;
+  }
+  wakeLock.Release();
+  Reset();
+}
+
+bool Timer::OnButtonPushed() {
+  if (alerting) {
+    StopAlerting();
+    return true;
+  }
+  return false;
 }

@@ -8,19 +8,26 @@
 #include <lvgl/lvgl.h>
 
 #include "components/timer/Timer.h"
+#include "components/motor/MotorController.h"
+#include "systemtask/WakeLock.h"
 #include "Symbols.h"
 
 namespace Pinetime::Applications {
   namespace Screens {
     class Timer : public Screen {
     public:
-      Timer(Controllers::Timer& timerController);
+      Timer(Controllers::Timer& timerController, Controllers::MotorController& motorController, System::SystemTask& systemTask);
       ~Timer() override;
       void Refresh() override;
       void Reset();
       void ToggleRunning();
       void ButtonPressed();
       void MaskReset();
+      /// The timer has run out. Ring until someone says otherwise, rather than buzzing once into
+      /// a pocket.
+      void SetAlerting();
+      void StopAlerting();
+      bool OnButtonPushed() override;
 
     private:
       void SetTimerRunning();
@@ -28,6 +35,8 @@ namespace Pinetime::Applications {
       void UpdateMask();
       void DisplayTime();
       Pinetime::Controllers::Timer& timer;
+      Pinetime::Controllers::MotorController& motorController;
+      Pinetime::System::WakeLock wakeLock;
 
       lv_obj_t* btnPlayPause;
       lv_obj_t* txtPlayPause;
@@ -38,6 +47,9 @@ namespace Pinetime::Applications {
       lv_objmask_mask_t* highlightMask;
 
       lv_task_t* taskRefresh;
+      /// Ends the ringing on its own if nobody answers it.
+      lv_task_t* taskStopAlerting = nullptr;
+      bool alerting = false;
       Widgets::Counter minuteCounter = Widgets::Counter(0, 59, jetbrains_mono_76);
       Widgets::Counter secondCounter = Widgets::Counter(0, 59, jetbrains_mono_76);
 
@@ -54,7 +66,7 @@ namespace Pinetime::Applications {
     static constexpr const char* icon = Screens::Symbols::hourGlass;
 
     static Screens::Screen* Create(AppControllers& controllers) {
-      return new Screens::Timer(controllers.timer);
+      return new Screens::Timer(controllers.timer, controllers.motorController, *controllers.systemTask);
     };
 
     static bool IsAvailable(Pinetime::Controllers::FS& /*filesystem*/) {
