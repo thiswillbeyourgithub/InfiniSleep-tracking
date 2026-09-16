@@ -13,6 +13,7 @@
 #include "components/settings/Settings.h"
 #include "displayapp/screens/Screen.h"
 #include "components/timer/Timer.h"
+#include "components/stopwatch/StopWatchController.h"
 #include "components/pomodoro/PomodoroController.h"
 #include "components/alarm/AlarmController.h"
 #include "components/infinisleep/InfiniSleepController.h"
@@ -109,6 +110,9 @@ namespace Pinetime {
       Pinetime::Controllers::FirmwareValidator validator;
       Pinetime::Components::LittleVgl lvgl;
       Pinetime::Controllers::Timer timer;
+      /* Lives here rather than in the stopwatch screen so that a run survives leaving the app:
+         the screen is destroyed as soon as something else is shown, this is not. */
+      Pinetime::Controllers::StopWatchController stopWatchController;
       Pinetime::Controllers::PomodoroController pomodoroController;
 
       AppControllers controllers;

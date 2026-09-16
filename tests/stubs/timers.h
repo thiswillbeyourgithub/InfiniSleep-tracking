@@ -7,6 +7,9 @@
 //     to stop or reschedule its own timer and have that win
 //   - callbacks may create, start and stop any timer, including the one being fired
 #include "FreeRTOS.h"
+// As the watch's timers.h does, so that a controller including only this one still gets the tick
+// counter.
+#include "task.h"
 
 #include <algorithm>
 #include <vector>

@@ -475,6 +475,7 @@ list(APPEND SOURCE_FILES
         components/motor/MotorController.cpp
         components/settings/Settings.cpp
         components/timer/Timer.cpp
+        components/stopwatch/StopWatchController.cpp
         components/alarm/AlarmController.cpp
         components/pomodoro/PomodoroController.cpp
         components/infinisleep/InfiniSleepController.cpp
@@ -548,6 +549,7 @@ list(APPEND RECOVERY_SOURCE_FILES
         components/firmwarevalidator/FirmwareValidator.cpp
         components/settings/Settings.cpp
         components/timer/Timer.cpp
+        components/stopwatch/StopWatchController.cpp
         components/alarm/AlarmController.cpp
         components/pomodoro/PomodoroController.cpp
         components/infinisleep/InfiniSleepController.cpp
@@ -673,6 +675,7 @@ set(INCLUDE_FILES
         components/ble/SimpleWeatherService.h
         components/settings/Settings.h
         components/timer/Timer.h
+        components/stopwatch/StopWatchController.h
         components/alarm/AlarmController.h
         components/infinisleep/InfiniSleepController.h
         drivers/Cst816s.h
