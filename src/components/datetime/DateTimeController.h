@@ -132,6 +132,14 @@ namespace Pinetime {
         return CurrentDateTime() - std::chrono::seconds((tzOffset + dstOffset) * 15 * 60);
       }
 
+      /// The same instant as UTCDateTime(), in the Unix epoch seconds that every log stores.
+      ///
+      /// Here rather than in each caller because a log record and an event carry the same kind of
+      /// timestamp, and the cast that produces one is not worth writing twice.
+      uint32_t UtcSecondsSinceEpoch() {
+        return std::chrono::duration_cast<std::chrono::seconds>(UTCDateTime().time_since_epoch()).count();
+      }
+
       std::chrono::seconds Uptime() const {
         return uptime;
       }

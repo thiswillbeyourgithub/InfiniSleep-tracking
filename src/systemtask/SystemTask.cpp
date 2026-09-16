@@ -746,7 +746,7 @@ void SystemTask::PollHeartRate() {
 }
 
 uint32_t SystemTask::UtcNowSeconds() {
-  return std::chrono::duration_cast<std::chrono::seconds>(dateTimeController.UTCDateTime().time_since_epoch()).count();
+  return dateTimeController.UtcSecondsSinceEpoch();
 }
 
 void SystemTask::NoteWearerAwake() {
