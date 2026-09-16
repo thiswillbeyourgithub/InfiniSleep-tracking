@@ -30,7 +30,7 @@ It builds on two upstream efforts, neither of which is merged:
 
 - A heart rate reading taken at each tracker epoch, rather than a setting that promised one and did nothing.
 - An actigraphy count accumulated from the accelerometer.
-- A ring of 341 records (timestamp, motion, heart rate, kind), stored packed at 6 bytes each and mirrored to `/.system/activity.dat` so it survives a reboot. About three and a half nights at a 5 minute epoch.
+- A ring of records (timestamp, motion, heart rate, kind), mirrored to `/.system/activity.dat` so it survives a reboot. Stored packed, at 3 bytes a record on a watch that measures no motion and 5 where it does, which is 682 records or 409: about 7 nights at a 5 minute epoch, or 21 at 15 minutes. The log starts narrow and widens for good on the first record that carries motion, so a watch whose accelerometer never answers does not spend a third of its log saying so. Nothing is quantised, and the format on the wire is the same either way.
 - A BLE service, `00060000-78fc-48fe-8e23-433b3a1942d0`, that hands the records over in batches and only reclaims the space once the host says it stored them.
 - Both sampling rates as settings, on a new Sensors page in the Sleep app.
 - Heart rate measured on a timer outside any sleep session, every 5, 15, 30 or 60 minutes, set from a new entry in the settings menu and off by default. It stands down while the sleep tracker runs, and with the screen on it records whatever the heart rate app is measuring rather than starting a measurement of its own, so it never takes the sensor from the wearer. A measurement left running in the app also survives the night now: the poll wakes the sensor for its reading and hands it back instead of ending it.
@@ -117,6 +117,7 @@ One warning specific to this tree: an incremental build can miss a header change
 
 ```bash
 tests/activity/run.sh          # activity log tests, on the host: no hardware, no docker
+                               # both record layouts, the widening, and the delta span
 tests/heartrate/run.sh         # heart rate latency and accuracy, likewise, on a synthetic pulse
 tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an hour in microseconds
 tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it takes to wrap round
@@ -152,6 +153,7 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 8464a0ff fix(watchface): show "?" rather than 0 for a heart rate that has no reading
 - 30ab9f09 fix(activity): stop a background poll from killing a manual measurement
 - 0765c1d6 feat(activity): log the readings a manual heart rate check produces
+- feat(activity): stop spending two bytes a record saying motion was not measured
 - 43d0f260 chore(apps): put the sleep app before steps in the app list
 - 44fc01be fix(heartrate): compare the DC residual to the peak, not to a fixed number
 - e71ea2ad perf(heartrate): show a coarse reading off half a window, then refine it
