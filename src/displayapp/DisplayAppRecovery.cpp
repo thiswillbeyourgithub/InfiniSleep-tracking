@@ -28,7 +28,9 @@ DisplayApp::DisplayApp(Drivers::St7789& lcd,
                        Pinetime::Controllers::FS& /*filesystem*/,
                        Pinetime::Drivers::SpiNorFlash& /*spiNorFlash*/,
                        Pinetime::Controllers::InfiniSleepController& /*infiniSleepController*/,
-                       Pinetime::Controllers::ActivityLogController& /*activityLogController*/)
+                       Pinetime::Controllers::ActivityLogController& /*activityLogController*/,
+                       Pinetime::Controllers::EventLogController& /*eventLogController*/,
+                       Pinetime::Controllers::LogSlots& /*logSlots*/)
   : lcd {lcd}, bleController {bleController} {
 }
 

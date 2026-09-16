@@ -39,6 +39,8 @@ namespace Pinetime {
     class NavigationService;
     class InfiniSleepController;
     class ActivityLogController;
+    class EventLogController;
+    class LogSlots;
   }
 
   namespace System {
@@ -65,7 +67,9 @@ namespace Pinetime {
                  Pinetime::Controllers::FS& filesystem,
                  Pinetime::Drivers::SpiNorFlash& spiNorFlash,
                  Pinetime::Controllers::InfiniSleepController& infiniSleepController,
-                 Pinetime::Controllers::ActivityLogController& activityLogController);
+                 Pinetime::Controllers::ActivityLogController& activityLogController,
+                 Pinetime::Controllers::EventLogController& eventLogController,
+                 Pinetime::Controllers::LogSlots& logSlots);
       void Start();
 
       void Start(Pinetime::System::BootErrors) {

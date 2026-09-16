@@ -4,6 +4,7 @@
 
 #include "displayapp/screens/Alarm.h"
 #include "displayapp/screens/Dice.h"
+#include "displayapp/screens/Logging.h"
 #include "displayapp/screens/Pomodoro.h"
 #include "displayapp/screens/Timer.h"
 #include "displayapp/screens/Twos.h"

@@ -136,7 +136,9 @@ Pinetime::Applications::DisplayApp displayApp(lcd,
                                               fs,
                                               spiNorFlash,
                                               infiniSleepController,
-                                              activityLogController);
+                                              activityLogController,
+                                              eventLogController,
+                                              logSlots);
 
 Pinetime::System::SystemTask systemTask(spi,
                                         spiNorFlash,

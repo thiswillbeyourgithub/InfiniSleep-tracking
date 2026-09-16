@@ -399,6 +399,7 @@ list(APPEND SOURCE_FILES
         displayapp/screens/Error.cpp
         displayapp/screens/Alarm.cpp
         displayapp/screens/Sleep.cpp
+        displayapp/screens/Logging.cpp
         displayapp/screens/SensorDisplay.cpp
         displayapp/screens/Styles.cpp
         displayapp/screens/WeatherSymbols.cpp
@@ -639,6 +640,7 @@ set(INCLUDE_FILES
         displayapp/screens/Dice.h
         displayapp/screens/Alarm.h
         displayapp/screens/Sleep.h
+        displayapp/screens/Logging.h
         displayapp/Colors.h
         displayapp/widgets/Counter.h
         displayapp/widgets/PageIndicator.h

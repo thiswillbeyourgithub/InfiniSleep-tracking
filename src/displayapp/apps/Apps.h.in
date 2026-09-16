@@ -46,6 +46,7 @@ namespace Pinetime {
       SettingShakeThreshold,
       SettingHeartRate,
       SettingBluetooth,
+      Logging,
       Error
     };
 

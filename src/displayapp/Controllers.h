@@ -22,6 +22,8 @@ namespace Pinetime {
     class PomodoroController;
     class InfiniSleepController;
     class ActivityLogController;
+    class EventLogController;
+    class LogSlots;
     class BrightnessController;
     class SimpleWeatherService;
     class FS;
@@ -49,6 +51,8 @@ namespace Pinetime {
       Pinetime::Controllers::PomodoroController& pomodoroController;
       Pinetime::Controllers::InfiniSleepController& infiniSleepController;
       Pinetime::Controllers::ActivityLogController& activityLogController;
+      Pinetime::Controllers::EventLogController& eventLogController;
+      Pinetime::Controllers::LogSlots& logSlots;
       Pinetime::Controllers::BrightnessController& brightnessController;
       Pinetime::Controllers::SimpleWeatherService* weatherController;
       Pinetime::Controllers::FS& filesystem;

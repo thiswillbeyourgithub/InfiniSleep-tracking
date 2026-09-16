@@ -18,6 +18,8 @@
 #include "components/alarm/AlarmController.h"
 #include "components/infinisleep/InfiniSleepController.h"
 #include "components/activity/ActivityLogController.h"
+#include "components/log/EventLogController.h"
+#include "components/log/LogSlots.h"
 #include "touchhandler/TouchHandler.h"
 
 #include "displayapp/Messages.h"
@@ -73,7 +75,9 @@ namespace Pinetime {
                  Pinetime::Controllers::FS& filesystem,
                  Pinetime::Drivers::SpiNorFlash& spiNorFlash,
                  Pinetime::Controllers::InfiniSleepController& infiniSleepController,
-                 Pinetime::Controllers::ActivityLogController& activityLogController);
+                 Pinetime::Controllers::ActivityLogController& activityLogController,
+                 Pinetime::Controllers::EventLogController& eventLogController,
+                 Pinetime::Controllers::LogSlots& logSlots);
       void Start(System::BootErrors error);
       void PushMessage(Display::Messages msg);
 
@@ -106,6 +110,8 @@ namespace Pinetime {
       Pinetime::Drivers::SpiNorFlash& spiNorFlash;
       Pinetime::Controllers::InfiniSleepController& infiniSleepController;
       Pinetime::Controllers::ActivityLogController& activityLogController;
+      Pinetime::Controllers::EventLogController& eventLogController;
+      Pinetime::Controllers::LogSlots& logSlots;
 
       Pinetime::Controllers::FirmwareValidator validator;
       Pinetime::Components::LittleVgl lvgl;
