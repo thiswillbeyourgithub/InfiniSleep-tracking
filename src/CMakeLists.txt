@@ -473,6 +473,7 @@ list(APPEND SOURCE_FILES
         components/activity/ActivityLogController.cpp
         components/log/CollectableLog.cpp
         components/log/EventLogController.cpp
+        components/log/LogSlots.cpp
         components/firmwarevalidator/FirmwareValidator.cpp
         components/motor/MotorController.cpp
         components/settings/Settings.cpp
@@ -550,6 +551,7 @@ list(APPEND RECOVERY_SOURCE_FILES
         components/activity/ActivityLogController.cpp
         components/log/CollectableLog.cpp
         components/log/EventLogController.cpp
+        components/log/LogSlots.cpp
         components/firmwarevalidator/FirmwareValidator.cpp
         components/settings/Settings.cpp
         components/timer/Timer.cpp
@@ -679,6 +681,7 @@ set(INCLUDE_FILES
         components/log/CollectableLog.h
         components/log/EventLog.h
         components/log/EventLogController.h
+        components/log/LogSlots.h
         components/ble/SimpleWeatherService.h
         components/settings/Settings.h
         components/timer/Timer.h

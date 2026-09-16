@@ -119,6 +119,7 @@ One warning specific to this tree: an incremental build can miss a header change
 tests/activity/run.sh          # activity log tests, on the host: no hardware, no docker
                                # both record layouts, the widening, and the delta span
 tests/eventlog/run.sh          # the event log: numbering, the release by sequence, reboots
+tests/logslots/run.sh          # the slot table: what a phone may push and what is refused
 tests/heartrate/run.sh         # heart rate latency and accuracy, likewise, on a synthetic pulse
 tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an hour in microseconds
 tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it takes to wrap round
