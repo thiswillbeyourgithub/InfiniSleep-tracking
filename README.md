@@ -81,6 +81,14 @@ It runs a queue of timers that chain into each other. Type `25,5` and the watch 
 
 Two controls differ from wasp-os, both forced by the firmware. Swiping down changes the vibration count instead of leaving the app, so the side button is the way out of the keypad; and the side button skips an alert, which wasp-os gave no way to do short of waiting it out. The app icon is the clock glyph rather than the wasp-os tomato, because the icon font has no tomato in it.
 
+## Timer and stopwatch
+
+Both stock apps were changed so that leaving them does not throw away what they were doing.
+
+The timer used to buzz once, for 35 milliseconds, when it ran out. From a pocket that was easy to miss, which defeats the point of setting one. It now rings the way the alarm does, a pulse every second, until someone presses Stop or the side button, and gives up after a minute if nobody answers. The countdown itself always ran in the background: it is a FreeRTOS timer, and the watch wakes itself and brings the app back when it expires.
+
+The stopwatch kept its state inside the screen, and the screen is deleted as soon as anything else is shown, so glancing at the watch face during a run lost it. Upstream fixed this by moving the state into a controller that outlives the screen, and that work is taken from upstream unchanged rather than rewritten, so nothing here has to be reconciled when this fork eventually merges with it. Laps, pauses and the elapsed time all survive leaving the app.
+
 ## Apps left out
 
 Paint, Paddle, Twos, Dice and the Metronome are not built into this firmware. They cost flash that the work above needed and none of them were being used. Navigation and Motion are left out upstream already, so nothing else is missing.
@@ -111,6 +119,7 @@ One warning specific to this tree: an incremental build can miss a header change
 tests/activity/run.sh          # activity log tests, on the host: no hardware, no docker
 tests/heartrate/run.sh         # heart rate latency and accuracy, likewise, on a synthetic pulse
 tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an hour in microseconds
+tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it takes to wrap round
 ```
 
 ## Commits in this fork
@@ -150,6 +159,8 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 2cffa95c test: share the host stubs between harnesses, and fake FreeRTOS timers
 - 55463e76 feat(pomodoro): add the controller behind a chained timer queue
 - bad42e93 feat(pomodoro): add the app screen and wire it into the launcher
+- 738499c3 feat(timer): ring until told to stop instead of buzzing once
+- c08e7f19 feat(stopwatch): keep a run going after the app is left
 
 Plus the commits that write this list, which cannot list their own hash, and the odd formatting or gitignore commit not worth a line.
 
