@@ -22,25 +22,30 @@ namespace Pinetime {
     private:
       /// How a record is held in RAM and in the file, which is not how it is handed out.
       ///
+      /// Bytes rather than a struct, because there are two layouts and the watch picks one at
+      /// runtime:
+      ///
+      ///   byte 0, 1  delta in minutes since the base (14 bits), then kind (2 bits)
+      ///   byte 2     heart rate in bpm, or 0 for not measured
+      ///   byte 3, 4  motion counts, in the wide layout only
+      ///
       /// The timestamp is the expensive field and the least surprising one to compress: every
-      /// record in the ring is within a few days of every other, so they are stored as minutes
-      /// since a single base rather than as four bytes of absolute time each. That is 6 bytes
-      /// instead of 8, which is a third more nights held for the same RAM.
+      /// record in the ring is within a few days of every other, so 14 bits of minutes since a
+      /// single base replaces four bytes of absolute time. Kind has four values and rides in
+      /// the two bits left over.
       ///
-      /// The cost is that a record is handed back rounded down to the minute relative to the
-      /// base. Nothing here samples faster than once a minute, so no two records can collapse
-      /// into one, and Add() rejects it as out of order if they ever do.
+      /// Motion is the field a watch may have no use for at all. A PineTime whose accelerometer
+      /// never answers records "not measured" for every epoch of every night, and spending two
+      /// bytes a record saying so costs a third of the nights the log could hold. So it is only
+      /// stored once something measures it, which is decided by the records themselves rather
+      /// than by a setting: the log starts narrow and widens for good on the first record that
+      /// carries motion. Nothing is quantised either way, so no reading loses precision.
       ///
-      /// Deliberately not variable length. Compacting a record with no motion, or one whose
-      /// spacing is the expected one, would save more, but the ring indexes by multiplication
-      /// and Release() trims from the front, so both need a fixed stride.
-      struct PackedRecord {
-        uint16_t deltaMinutes;
-        uint16_t motion;
-        uint8_t heartRate;
-        uint8_t kind;
-      };
-      static_assert(sizeof(PackedRecord) == 6, "PackedRecord is expected to pack into 6 bytes");
+      /// The stride is fixed within a layout, which the ring needs: it indexes by
+      /// multiplication and Release() trims from the front.
+      static constexpr uint8_t narrowRecordSize = 3;
+      static constexpr uint8_t wideRecordSize = 5;
+      static constexpr uint8_t deltaBits = 14;
 
     public:
       explicit ActivityLogController(Controllers::FS& fs);
@@ -129,21 +134,28 @@ namespace Pinetime {
       /// rather than as a link error.
       static constexpr uint16_t ramBudget = 2048;
 
-      /// Derived, so that making the record smaller buys nights rather than free RAM nobody
-      /// notices. At eight hours of tracking a night, the current 6 byte record gives:
-      ///   5 minute epoch  -> 96 records a night, so about 3.5 nights
-      ///   15 minute epoch -> 32 records a night, so about 10 nights
-      static constexpr uint16_t capacity = ramBudget / sizeof(PackedRecord);
+      /// Most records the log can hold, which is what it holds while nothing measures motion.
+      /// Derived, so that making a record smaller buys nights rather than free RAM nobody
+      /// notices. At eight hours of tracking a night:
+      ///   5 minute epoch -> 96 records a night, so about 7 nights
+      ///   15 minute epoch -> 32 records a night, so about 21 nights
+      /// A watch that does measure motion holds fewer, hence Capacity() rather than a constant.
+      static constexpr uint16_t maxCapacity = ramBudget / narrowRecordSize;
+
+      /// How many records fit as things stand, which is maxCapacity until motion turns up.
+      uint16_t Capacity() const;
 
     private:
       /// Bumped whenever the stored layout changes. A file written by an older firmware is
-      /// discarded rather than misread. Version 2 is the packed record below; version 1 stored
-      /// whole ActivityRecords.
-      static constexpr uint8_t fileFormatVersion = 2;
+      /// discarded rather than misread. Version 3 is the byte layout above, version 2 was a
+      /// 6 byte packed record, version 1 whole ActivityRecords.
+      static constexpr uint8_t fileFormatVersion = 3;
       static constexpr const char* filePath = "/.system/activity.dat";
 
-      /// The largest delta a record can hold, which is 45 days from the base.
-      static constexpr uint16_t deltaMax = 0xFFFF;
+      /// The largest delta a record can hold, which is 11.4 days from the base. A log whose
+      /// oldest record is older than that loses its oldest records rather than all of them, so
+      /// this bounds how far back the log reaches at the longest tracker intervals.
+      static constexpr uint16_t deltaMax = (1 << deltaBits) - 1;
 
       /// Expands one stored record. Valid for 0 <= offset < count, and by value because there
       /// is no ActivityRecord in memory to point at.
@@ -151,9 +163,32 @@ namespace Pinetime {
       /// The same expansion for callers that only need the time, which is most of them.
       uint32_t TimestampAt(uint16_t offset) const;
 
+      /// How many records fit, which the caller is expected to already hold the lock for.
+      uint16_t Slots() const;
+
+      /// The bytes of one stored record. Valid for 0 <= offset < count.
+      uint8_t* Slot(uint16_t offset);
+      const uint8_t* Slot(uint16_t offset) const;
+
+      /// The stored delta of one record, in minutes since the base.
+      uint16_t DeltaAt(uint16_t offset) const;
+
+      /// Writes one record into a slot, in whichever layout the ring is in.
+      void Store(uint16_t offset, uint16_t delta, const ActivityRecord& record);
+
       /// Moves base forward to the oldest record held, so the deltas start from zero again.
       /// Assumes the caller holds the lock and that there is at least one record.
       void Rebase();
+
+      /// Moves the oldest record to slot zero, so that a walk over the ring is a walk over the
+      /// buffer. Only needed when the layout changes under the records, since everything else
+      /// here is happy to index through the rotation.
+      void Rotate();
+      void ReverseSlots(uint16_t from, uint16_t to);
+
+      /// Switches to the wide layout, keeping the newest records that still fit. Called once,
+      /// from the first Add() that carries motion.
+      void Widen();
 
       /// Both assume the caller holds the lock.
       void LoadFromFile();
@@ -164,7 +199,14 @@ namespace Pinetime {
 
       Controllers::FS& fs;
 
-      PackedRecord records[capacity];
+      /// The ring itself, as bytes rather than records, because the stride depends on whether
+      /// this watch measures motion at all. Indexed through Slot().
+      uint8_t storage[ramBudget] = {};
+
+      /// Which of the two layouts the ring currently holds, narrow until the first record that
+      /// carries motion. Saved in the file, so a watch that measures motion does not spend a
+      /// widening on every boot.
+      uint8_t recordSize = narrowRecordSize;
       /// What the deltas are measured from, in Unix epoch seconds. Set to the timestamp of the
       /// first record added to an empty ring.
       uint32_t base = 0;

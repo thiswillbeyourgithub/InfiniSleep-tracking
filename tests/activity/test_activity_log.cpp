@@ -20,6 +20,15 @@ static int failures = 0;
 namespace {
   constexpr uint32_t t0 = 1800000000;  // an arbitrary but realistic epoch, 2027-01-15
 
+  /// What a watch whose accelerometer never answers records, which is a real watch rather than a
+  /// hypothetical one, and the case the narrow layout exists for.
+  constexpr uint16_t noMotion = ActivityRecord::motionNotMeasured;
+
+  /// How many records fit in each layout. Spelled out rather than derived so that a change to
+  /// either stride has to be looked at here too.
+  constexpr uint16_t narrowSlots = 682;  // 2048 / 3
+  constexpr uint16_t wideSlots = 409;    // 2048 / 5
+
   ActivityRecord Rec(uint32_t timestamp, uint8_t hr = 60, uint16_t motion = 1234, ActivityKind kind = ActivityKind::Asleep) {
     ActivityRecord record;
     record.timestamp = timestamp;
@@ -47,9 +56,10 @@ namespace {
 }
 
 int main() {
-  printf("capacity=%u  sizeof(record in ring)=%u bytes\n",
-         ActivityLogController::capacity,
-         (unsigned) (ActivityLogController::ramBudget / ActivityLogController::capacity));
+  printf("ramBudget=%u  records: %u without motion, %u with\n",
+         ActivityLogController::ramBudget,
+         ActivityLogController::maxCapacity,
+         wideSlots);
 
   {
     printf("round trip, and timestamps land on the minute relative to the base\n");
@@ -95,15 +105,17 @@ int main() {
     log.Init();
 
     const uint16_t extra = 10;
-    for (uint16_t i = 0; i < ActivityLogController::capacity + extra; i++) {
+    CHECK(log.Capacity() == ActivityLogController::maxCapacity);  // nothing stored yet
+    for (uint16_t i = 0; i < wideSlots + extra; i++) {
       log.Add(Rec(t0 + i * 300, static_cast<uint8_t>(50 + i % 50)));
     }
-    CHECK(log.RecordCount() == ActivityLogController::capacity);
+    CHECK(log.Capacity() == wideSlots);  // the records carry motion, so fewer of them fit
+    CHECK(log.RecordCount() == wideSlots);
     CHECK(log.OldestTimestamp() == t0 + extra * 300);
-    CHECK(log.NewestTimestamp() == t0 + (ActivityLogController::capacity + extra - 1) * 300);
+    CHECK(log.NewestTimestamp() == t0 + (wideSlots + extra - 1) * 300);
 
     const auto all = ReadAll(log);
-    CHECK(all.size() == ActivityLogController::capacity);
+    CHECK(all.size() == wideSlots);
     bool ordered = true;
     for (size_t i = 1; i < all.size(); i++) {
       ordered = ordered && all[i].timestamp > all[i - 1].timestamp;
@@ -168,16 +180,16 @@ int main() {
     log.Init();
 
     // Fill past capacity so head is well away from zero and the ring has wrapped.
-    for (uint16_t i = 0; i < ActivityLogController::capacity + 20; i++) {
+    for (uint16_t i = 0; i < wideSlots + 20; i++) {
       log.Add(Rec(t0 + i * 300, static_cast<uint8_t>(50 + i % 50)));
     }
     const uint32_t cut = log.NewestTimestamp() - 5 * 300;
     log.DropSince(cut);
-    CHECK(log.RecordCount() == ActivityLogController::capacity - 6);
+    CHECK(log.RecordCount() == wideSlots - 6);
     CHECK(log.NewestTimestamp() == cut - 300);
 
     const auto all = ReadAll(log);
-    CHECK(all.size() == static_cast<size_t>(ActivityLogController::capacity - 6));
+    CHECK(all.size() == static_cast<size_t>(wideSlots - 6));
     bool ordered = true;
     for (size_t i = 1; i < all.size(); i++) {
       ordered = ordered && all[i].timestamp > all[i - 1].timestamp;
@@ -218,7 +230,7 @@ int main() {
     ActivityLogController log(fs);
     log.Init();
 
-    for (uint16_t i = 0; i < ActivityLogController::capacity + 20; i++) {
+    for (uint16_t i = 0; i < wideSlots + 20; i++) {
       log.Add(Rec(t0 + i * 300));
     }
     log.Flush();
@@ -230,7 +242,7 @@ int main() {
     CHECK(!fs.contents.empty());  // the correction reached flash
 
     const auto all = ReadAll(log);
-    CHECK(all.size() == ActivityLogController::capacity);
+    CHECK(all.size() == wideSlots);
     CHECK(all[all.size() - 5].kind == ActivityKind::Asleep);
     CHECK(all[all.size() - 4].kind == ActivityKind::Awake);
     CHECK(all.back().kind == ActivityKind::Awake);
@@ -305,8 +317,14 @@ int main() {
     ActivityLogController log2(fs2);
     log2.Init();
     log2.Add(Rec(t0));
-    log2.Add(Rec(t0 + 60u * 60 * 24 * 40));
+    log2.Add(Rec(t0 + 60u * 60 * 24 * 10));  // 10 days on, still within reach of the base
     CHECK(log2.RecordCount() == 2);
+
+    // Just past it, so the oldest goes and the rest stay, rather than the log being emptied.
+    log2.Add(Rec(t0 + 60u * 60 * 24 * 12));
+    CHECK(log2.RecordCount() == 2);
+    CHECK(log2.OldestTimestamp() == t0 + 60u * 60 * 24 * 10);
+    CHECK(log2.NewestTimestamp() == t0 + 60u * 60 * 24 * 12);
   }
 
   {
@@ -320,7 +338,7 @@ int main() {
       }
       log.Release(t0 + 5 * 300);  // so the ring is rotated when it is written out
       log.Flush();
-      CHECK(fs.contents.size() == 8 + 34 * 6);  // header plus 34 packed records
+      CHECK(fs.contents.size() == 8 + 34 * 5);  // header plus 34 wide records
     }
 
     ActivityLogController reloaded(fs);
@@ -376,7 +394,176 @@ int main() {
     CHECK(fs.contents.empty());
     log.Add(Rec(t0 + 300));
     log.Flush();
-    CHECK(fs.contents.size() == written + 6);
+    CHECK(fs.contents.size() == written + 5);
+  }
+
+  {
+    printf("a watch that measures no motion holds half again as many records\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    for (uint16_t i = 0; i < narrowSlots + 7; i++) {
+      log.Add(Rec(t0 + i * 300, static_cast<uint8_t>(50 + i % 50), noMotion));
+    }
+    CHECK(log.Capacity() == narrowSlots);
+    CHECK(log.RecordCount() == narrowSlots);
+    CHECK(log.OldestTimestamp() == t0 + 7 * 300);
+    CHECK(log.NewestTimestamp() == t0 + (narrowSlots + 6) * 300);
+
+    const auto all = ReadAll(log);
+    CHECK(all.size() == narrowSlots);
+    bool intact = true;
+    for (size_t i = 0; i < all.size(); i++) {
+      intact = intact && all[i].motion == noMotion && all[i].kind == ActivityKind::Asleep &&
+               all[i].heartRate == static_cast<uint8_t>(50 + (i + 7) % 50);
+      if (i > 0) {
+        intact = intact && all[i].timestamp == all[i - 1].timestamp + 300;
+      }
+    }
+    CHECK(intact);
+
+    log.Flush();
+    CHECK(fs.contents.size() == 8u + narrowSlots * 3u);  // three bytes a record, not five
+  }
+
+  {
+    printf("the first record that carries motion widens the log without losing the night\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    for (uint16_t i = 0; i < 30; i++) {
+      log.Add(Rec(t0 + i * 300, static_cast<uint8_t>(60 + i), noMotion));
+    }
+    CHECK(log.Capacity() == narrowSlots);
+
+    log.Add(Rec(t0 + 30 * 300, 99, 4321));
+    CHECK(log.Capacity() == wideSlots);
+    CHECK(log.RecordCount() == 31);
+
+    const auto all = ReadAll(log);
+    CHECK(all.size() == 31);
+    CHECK(all[0].timestamp == t0);
+    CHECK(all[0].heartRate == 60);
+    CHECK(all[0].motion == noMotion);  // it still says what it measured, which was nothing
+    CHECK(all[29].heartRate == 89);
+    CHECK(all.back().timestamp == t0 + 30 * 300);
+    CHECK(all.back().heartRate == 99);
+    CHECK(all.back().motion == 4321);
+  }
+
+  {
+    printf("widening a full and wrapped log keeps the newest records that fit\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    // Past the narrow capacity, so the ring has wrapped and the oldest record is not at slot
+    // zero, which is the case the rotation inside the widening is there for.
+    for (uint16_t i = 0; i < narrowSlots + 40; i++) {
+      log.Add(Rec(t0 + i * 300, static_cast<uint8_t>(50 + i % 50), noMotion));
+    }
+    CHECK(log.RecordCount() == narrowSlots);
+
+    const uint32_t newestBefore = log.NewestTimestamp();
+    log.Add(Rec(newestBefore + 300, 77, 4321));
+    CHECK(log.Capacity() == wideSlots);
+    CHECK(log.RecordCount() == wideSlots);
+    CHECK(log.NewestTimestamp() == newestBefore + 300);
+    CHECK(log.OldestTimestamp() == newestBefore + 300 - (wideSlots - 1) * 300);
+
+    const auto all = ReadAll(log);
+    CHECK(all.size() == wideSlots);
+    bool ordered = true;
+    for (size_t i = 1; i < all.size(); i++) {
+      ordered = ordered && all[i].timestamp == all[i - 1].timestamp + 300;
+    }
+    CHECK(ordered);
+    CHECK(all.back().motion == 4321);
+    CHECK(all[all.size() - 2].motion == noMotion);
+  }
+
+  {
+    printf("the layout survives a reboot, so a watch does not widen again every boot\n");
+    FS narrowFs;
+    {
+      ActivityLogController log(narrowFs);
+      log.Init();
+      for (uint16_t i = 0; i < 20; i++) {
+        log.Add(Rec(t0 + i * 300, 61, noMotion));
+      }
+      log.Flush();
+    }
+    ActivityLogController narrow(narrowFs);
+    narrow.Init();
+    CHECK(narrow.Capacity() == narrowSlots);
+    CHECK(narrow.RecordCount() == 20);
+    CHECK(ReadAll(narrow).back().motion == noMotion);
+
+    FS wideFs;
+    {
+      ActivityLogController log(wideFs);
+      log.Init();
+      for (uint16_t i = 0; i < 20; i++) {
+        log.Add(Rec(t0 + i * 300, 61, static_cast<uint16_t>(i * 11)));
+      }
+      log.Flush();
+    }
+    ActivityLogController wide(wideFs);
+    wide.Init();
+    CHECK(wide.Capacity() == wideSlots);
+    CHECK(wide.RecordCount() == 20);
+    CHECK(ReadAll(wide).back().motion == 19 * 11);
+  }
+
+  {
+    printf("clearing starts over narrow, since an empty log needs no room for motion\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+    log.Add(Rec(t0, 60, 1234));
+    CHECK(log.Capacity() == wideSlots);
+    log.Clear();
+    CHECK(log.Capacity() == narrowSlots);
+    log.Add(Rec(t0 + 300, 60, noMotion));
+    CHECK(log.Capacity() == narrowSlots);
+    CHECK(log.RecordCount() == 1);
+  }
+
+  {
+    printf("corrections and drops reach the kind without disturbing the delta beside it\n");
+    FS fs;
+    ActivityLogController log(fs);
+    log.Init();
+
+    for (uint16_t i = 0; i < 6; i++) {
+      log.Add(Rec(t0 + i * 300, static_cast<uint8_t>(70 + i), noMotion));
+    }
+    log.Remark(t0 + 3 * 300, ActivityKind::Asleep, ActivityKind::Awake);
+    log.DropSince(t0 + 5 * 300);
+
+    const auto all = ReadAll(log);
+    CHECK(all.size() == 5);
+    CHECK(all[2].kind == ActivityKind::Asleep);
+    CHECK(all[3].kind == ActivityKind::Awake);
+    CHECK(all[4].kind == ActivityKind::Awake);
+    bool intact = true;
+    for (size_t i = 0; i < all.size(); i++) {
+      intact = intact && all[i].timestamp == t0 + i * 300 && all[i].heartRate == static_cast<uint8_t>(70 + i) &&
+               all[i].motion == noMotion;
+    }
+    CHECK(intact);
+  }
+
+  {
+    printf("a version 2 file, from before motion moved out of the record, is discarded\n");
+    FS fs;
+    fs.exists = true;
+    fs.contents = {2, 6, 3, 0, 0, 0, 0, 0};  // version 2, 6 byte records
+    ActivityLogController log(fs);
+    log.Init();
+    CHECK(log.RecordCount() == 0);
   }
 
   if (failures == 0) {

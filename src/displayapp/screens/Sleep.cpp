@@ -350,7 +350,7 @@ void Sleep::DrawInfoScreen() {
   lv_label_set_text_fmt(label_record_count,
                         "Points: %d/%d",
                         activityLogController.RecordCount(),
-                        Controllers::ActivityLogController::capacity);
+                        activityLogController.Capacity());
   lv_obj_align(label_record_count, lv_scr_act(), LV_ALIGN_IN_TOP_MID, 0, 30);
   lv_obj_set_style_local_text_color(label_record_count,
                                     LV_LABEL_PART_MAIN,
@@ -588,7 +588,7 @@ void Sleep::DrawLogScreen() {
   // when a companion application has said it stored it, so nothing here is a copy of something
   // the phone already has.
   lv_obj_t* waiting = CreateLogRow("Waiting", 44);
-  lv_label_set_text_fmt(waiting, "%d/%d", activityLogController.RecordCount(), Controllers::ActivityLogController::capacity);
+  lv_label_set_text_fmt(waiting, "%d/%d", activityLogController.RecordCount(), activityLogController.Capacity());
 
   const uint32_t now =
     std::chrono::duration_cast<std::chrono::seconds>(dateTimeController.UTCDateTime().time_since_epoch()).count();
