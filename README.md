@@ -4,6 +4,22 @@ A personal fork of [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime), th
 
 The work lives on the `infinisleep-health` branch. A [Logging app](#logging-what-happens-through-the-day) for whatever else the wearer wants recorded through the day, and a [Pomodoro app](#pomodoro-app) ported from wasp-os, ride along, both unrelated to the sleep work and described further down. The other half is [Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), the companion app that collects what this firmware records. Neither half is useful without the other.
 
+## Contents
+
+- [Ready to install, no toolchain needed](#ready-to-install-no-toolchain-needed)
+- [Why](#why)
+- [What this fork adds](#what-this-fork-adds)
+- [Motion tracking is untested, because this watch's accelerometer is broken](#motion-tracking-is-untested-because-this-watchs-accelerometer-is-broken)
+- [Companion app](#companion-app)
+- [Pomodoro app](#pomodoro-app)
+- [Timer and stopwatch](#timer-and-stopwatch)
+- [Logging what happens through the day](#logging-what-happens-through-the-day)
+- [Apps left out](#apps-left-out)
+- [Building](#building)
+- [Everything this fork changes](#everything-this-fork-changes)
+- [Upstream](#upstream)
+- [Licenses](#licenses)
+
 ## Ready to install, no toolchain needed
 
 **Built firmware is published on the [Releases page](../../releases).** Download the `pinetime-mcuboot-app-dfu-*.zip` from the newest release and flash it straight to the watch. There is nothing to compile and no docker image to pull.
@@ -11,7 +27,7 @@ The work lives on the `infinisleep-health` branch. A [Logging app](#logging-what
 - **From the phone**, open the zip with Gadgetbridge, which knows how to send a PineTime DFU package. Stock Gadgetbridge does this, not only the companion fork.
 - **From a computer**, `python dfu.py -z pinetime-mcuboot-app-dfu-<version>.zip -a <MAC> --legacy`, using the `dfu.py` from the InfiniTime repository. The one from wasp-os fails with a UUID error.
 
-Those files are **compiled by me, on my own machine**, from the commit each release names. No CI produced them, they are not signed, and nothing about them is reproducible beyond the fact that the source they came from is right here. If you would rather not take my word for it, the build instructions below produce the same thing from the same commit.
+Those files are **compiled by me, on my own machine**, from the commit each release names. No CI produced them, they are not signed, and nothing about them is reproducible beyond the source being right here. The build instructions below produce the same thing from the same commit.
 
 Updating from an earlier build of this fork **resets every watch setting once**: watch face, brightness, wake modes, steps goal and heart rate interval all go back to their defaults. The settings file carries a version, this release changed it, and a file whose version does not match is discarded rather than misread.
 
@@ -38,12 +54,12 @@ It builds on two upstream efforts, neither of which is merged:
 - A heart rate in about three seconds rather than six and a half, estimated off half a sample window and refined as full windows arrive, with the spread shown under the number in the heart rate app until the windows agree on it. Upstream cannot say anything at all before a full window is in.
 - One upstream bug behind part of that wait, and behind measurements that never converged at all: the check that rejects a window left with a baseline residual compared it against a fixed number, while every magnitude in the spectrum scales with how strong the pulse is. A pulse above roughly 60 ADC counts was therefore thrown away at every heart rate, however long the wearer waited. Both the fix and the early estimate are measured on the host against a synthetic pulse rather than on a wrist with a stopwatch.
 - Watch faces that show only figures they can stand behind: `?` rather than a heart rate of `0` while the sensor has not converged or sees no skin, and no step count at all when nothing is counting steps.
-- Awake time told apart from sleep within a session. A button press or a wake gesture during the night marks the next 15 minutes awake, and the 5 minutes before it, since waking is not instantaneous. Two of them within half an hour mark the whole stretch between. A wrist raise deliberately does not count, because rolling over triggers it.
+- Awake time told apart from sleep within a session. A button press or a wake gesture during the night marks the next 15 minutes awake, and the 5 minutes before it, since waking is not instantaneous. Two of them within half an hour mark the whole stretch between. A wrist raise does not count, because rolling over triggers it.
 - A marks page, reachable by swiping up from the tracking page while a session runs, with a **Not asleep yet** button. It rewrites everything since the session started as awake, for the night that begins with an hour of reading in bed.
 - Sessions under five minutes discarded rather than handed over, and one awake record written at each end of a session, so a companion app charts the stretch that was tracked instead of everything back to the previous sample.
 - A backoff below 25 percent battery: the epoch floors at 30 minutes and the accelerometer poll at 1 second, so the tracker does not flatten the battery before morning, and the log is written to flash on the way past that threshold so a battery that dies at 4am does not take the night with it.
 
-The BLE service is deliberately kept independent of how sleep is tracked, so it could be reviewed on its own.
+The BLE service is independent of how sleep is tracked, so it can be reviewed on its own.
 
 ## Motion tracking is untested, because this watch's accelerometer is broken
 
@@ -57,7 +73,7 @@ The step count the watch faces showed was a permanent `0` for the same reason, s
 
 ## Companion app
 
-[Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), branch `infinisleep`, is the companion app for this firmware. Stock Gadgetbridge does not know about this service and will simply ignore it, so the log stays on the watch until it is overwritten.
+[Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), branch `infinisleep`, is the companion app for this firmware. Stock Gadgetbridge does not know about this service and ignores it, so the log stays on the watch until it is overwritten.
 
 There is no need to uninstall the Gadgetbridge you already have. The fork builds under its own application id, so the two sit side by side on the phone and keep separate databases:
 
@@ -68,7 +84,7 @@ adb install -r app/build/outputs/apk/mainline/nopebble/*.apk
 
 ## Pomodoro app
 
-A port of the [Pomodoro application](https://wasp-os.readthedocs.io/en/latest/apps.html#pomodoro-application) from wasp-os, written by the same author as [SleepTk](https://github.com/thiswillbeyourgithub/SleepTk_pinetime_sleep_tracker), the wasp-os sleep tracker that the InfiniSleep work above ultimately descends from. Nothing in it touches sleep tracking. It is simply an app this watch was missing.
+A port of the [Pomodoro application](https://wasp-os.readthedocs.io/en/latest/apps.html#pomodoro-application) from wasp-os, written by the same author as [SleepTk](https://github.com/thiswillbeyourgithub/SleepTk_pinetime_sleep_tracker), the wasp-os sleep tracker that the InfiniSleep work above ultimately descends from. Nothing in it touches sleep tracking. It is an app this watch was missing.
 
 It runs a queue of timers that chain into each other. Type `25,5` and the watch counts down 25 minutes, vibrates, counts down 5, vibrates, and starts over, until it is stopped or 99 rounds have passed. The Timer app in stock InfiniTime runs one countdown once.
 
@@ -142,55 +158,58 @@ tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an 
 tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it takes to wrap round
 ```
 
-## Commits in this fork
+## Everything this fork changes
 
-Oldest first, as conventional commits. The history was squashed into one commit per subject, so bug fixes are folded into whatever introduced them.
+Described above, gathered in one place. The history is squashed into one commit per subject, so a bug fix sits inside whatever introduced it.
 
-- cfc4ec5f feat(motion): report why the accelerometer failed to initialise, on the About screen
-- 0f0ad621 feat(activity): keep a log of recorded activity and serve it over BLE, with host tests
-- 2dcd595e feat(infinisleep): write one activity record per tracker epoch, with heart rate, motion and a low battery backoff
-- 8418c4ff feat(infinisleep): rework the sleep pages and add a Sensors page
-- 971d979b chore: drop four games for flash, and ignore the local build helpers
-- e31ae1b4 feat(infinisleep): put the sensor settings on top of the sleep pages
-- 3a7fd504 fix(infinisleep): make the Auto button set the wake up time and nothing else
-- ae0fc430 feat(settings): add a heart rate polling interval to the settings menu
-- 67d2cbdf feat(activity): measure heart rate on a timer outside sleep sessions
-- 9a571a29 fix(infinisleep): disable the wake alarm when the tracker is stopped
-- 574002b3 chore: drop the Metronome app
-- 5aaaebf8 feat(sleep): show the activity log record count on the Info page
-- f5f2b860 fix(activity): stop publishing self started measurements as live heart rate
-- ca0976f6 feat(sleep): add a log page showing what is waiting to be collected
-- 5839e9ca feat(activity): record when a host last asked for records
-- 8baf09cd feat(activity): record the quarter hour after a look at the watch as awake
-- 1f0cfe37 feat(activity): let the log take records back from the newest end
-- e23dd77a feat(infinisleep): discard a session that lasted under five minutes
-- 59267b6d feat(activity): bound a session with an awake record at each end
-- 1f3666c1 feat(activity): let the log rewrite the kind of records it already holds
-- 4f745214 feat(activity): mark the minutes before a look at the watch as awake too
-- 5a1501d0 feat(infinisleep): add a marks page with "Not asleep yet"
-- fb4f7c8e feat(settings): let the wearer turn steps off, and hide them with no sensor
-- 8464a0ff fix(watchface): show "?" rather than 0 for a heart rate that has no reading
-- 30ab9f09 fix(activity): stop a background poll from killing a manual measurement
-- 0765c1d6 feat(activity): log the readings a manual heart rate check produces
-- 43d0f260 chore(apps): put the sleep app before steps in the app list
-- 44fc01be fix(heartrate): compare the DC residual to the peak, not to a fixed number
-- e71ea2ad perf(heartrate): show a coarse reading off half a window, then refine it
-- ddc31cd5 feat(heartrate): show the reading as a range until it settles
-- 2cffa95c test: share the host stubs between harnesses, and fake FreeRTOS timers
-- 55463e76 feat(pomodoro): add the controller behind a chained timer queue
-- bad42e93 feat(pomodoro): add the app screen and wire it into the launcher
-- 738499c3 feat(timer): ring until told to stop instead of buzzing once
-- c08e7f19 feat(stopwatch): keep a run going after the app is left
-- 7d365dd5 feat(activity): stop spending two bytes a record saying motion was not measured
-- 87a28801 refactor(log): share the ring, the file mirror and the release
-- 8ea4dcd2 feat(log): keep the events the wearer logs, numbered so a host can acknowledge them
-- 8f5f2b6c feat(log): hold the table of slots the phone pushes, and refuse one that does not hold together
-- d8bbef7f feat(log): hand the event log and the slot table over BLE
-- f560f784 feat(log): let an event be flagged after it was logged
-- 40147a8d refactor(datetime): one place that turns the clock into epoch seconds
-- 9c3524e7 feat(logging): a watch app built out of the table the phone pushed
+Sleep tracking:
 
-Plus the commits that write this list, which cannot list their own hash, and the odd formatting or gitignore commit not worth a line.
+- One activity record per tracker epoch, with heart rate, motion and a backoff below 25 percent battery.
+- Awake time told apart from sleep inside a session, from button presses and wake gestures, and a marks page with **Not asleep yet**.
+- Sessions under five minutes discarded, and one awake record at each end of the ones that are kept.
+- The sleep pages reworked, a Sensors page added, and the sensor settings put on top of them.
+- The Auto button sets the wake up time and nothing else, and the wake alarm stands down when the tracker is stopped.
+- An Info page record count and a log page showing what is waiting to be collected.
+
+The activity log:
+
+- A ring of records mirrored to flash, served over BLE, and space reclaimed only once the host says it stored them.
+- Records packed to 3 bytes where there is no motion and 5 where there is, the layout chosen from the records themselves.
+- The log can take records back from its newest end and rewrite the kind of records it already holds.
+- When a host last asked is recorded, so the watch can say how far behind the phone is.
+- Heart rate measured on a timer outside sleep sessions, and every settled reading from a manual check logged as well.
+
+Heart rate:
+
+- A reading in about three seconds rather than six and a half, off half a window, refined as full windows arrive and shown as a range until they agree.
+- The DC residual check compared against the peak rather than a fixed number, which is why strong pulses never converged at all.
+- A background poll no longer kills a measurement the wearer started.
+- Self started measurements are no longer published as a live heart rate.
+
+Motion and steps:
+
+- Why the accelerometer failed to initialise, on the About screen.
+- Steps hidden when no sensor answered at boot, and a toggle for a wearer who has one and would rather not see them.
+- `?` rather than a heart rate of `0` on the watch faces.
+
+Logging through the day:
+
+- The ring, the file mirror and the release shared with the activity log rather than copied.
+- The events the wearer logs, numbered so a host can acknowledge them, and flaggable after the fact.
+- The table of slots the phone pushes, refused whole if it does not hold together.
+- Both handed over BLE, and a Logging app built out of the table at runtime.
+- One place that turns the clock into epoch seconds.
+
+Other apps:
+
+- A Pomodoro app: a queue of timers that chain into each other.
+- The Timer rings until told to stop instead of buzzing once.
+- The Stopwatch keeps a run going after the app is left.
+- The sleep app sits before steps in the app list, and four games and the Metronome are dropped for flash.
+
+Tests:
+
+- Host stubs shared between harnesses, with fake FreeRTOS timers.
 
 ## Upstream
 
