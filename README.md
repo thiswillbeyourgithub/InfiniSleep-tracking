@@ -2,7 +2,7 @@
 
 A personal fork of [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime), the open source firmware for the [PineTime](https://pine64.org/devices/pinetime/), with one goal: make the watch record sleep on its own and hand the recording to a companion app afterwards.
 
-The work lives on the `infinisleep-health` branch. A [Pomodoro app](#pomodoro-app) ported from wasp-os rides along, unrelated to the sleep work and described further down. The other half is [Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), the companion app that collects what this firmware records. Neither half is useful without the other.
+The work lives on the `infinisleep-health` branch. A [Logging app](#logging-what-happens-through-the-day) for whatever else the wearer wants recorded through the day, and a [Pomodoro app](#pomodoro-app) ported from wasp-os, ride along, both unrelated to the sleep work and described further down. The other half is [Gadgetbridge-infinisleep-tracking](https://codeberg.org/thiswillbeyourgithub/Gadgetbridge-infinisleep-tracking), the companion app that collects what this firmware records. Neither half is useful without the other.
 
 ## Ready to install, no toolchain needed
 
@@ -89,6 +89,23 @@ The timer used to buzz once, for 35 milliseconds, when it ran out. From a pocket
 
 The stopwatch kept its state inside the screen, and the screen is deleted as soon as anything else is shown, so glancing at the watch face during a run lost it. Upstream fixed this by moving the state into a controller that outlives the screen, and that work is taken from upstream unchanged rather than rewritten, so nothing here has to be reconciled when this fork eventually merges with it. Laps, pauses and the elapsed time all survive leaving the app.
 
+## Logging what happens through the day
+
+Sleep is not the only thing worth recording, and the watch is the only thing already on the wrist when something happens. A **Logging app** keeps a log of whatever the wearer decided is worth a tap: medication taken, a nap, feeling sick, a pain score.
+
+Nothing about what can be logged is compiled in. The watch holds a table of slots the [companion app](#companion-app) pushes to it, and the app's menu is built out of that table at runtime, so a new thing to log costs an edit on the phone rather than a firmware build. The watch stores numbers and never names.
+
+- Up to 32 slots, each with a number the watch logs, a label of 15 bytes and a kind: it happened, it started and later stopped, it happened and carries a reading from 0 to 10, or it is a group of other slots. Groups go two levels deep at most, and a table whose top level holds a single group opens inside it, because a screen with one button on it is a step for nothing.
+- A reading is picked on a slider rather than with plus and minus buttons. Ten taps to say ten is a different act from one tap to say one, and a reading entered that way carries how awkward it was to enter.
+- A stretch of time is two independent events, a start and a stop, against the same slot. **The watch never pairs them**: a reboot or a flat battery during a nap would leave it holding a session it can never close. It does show whether a continuous slot is running, read back from the events it still holds, and losing that to a reboot costs nothing because the phone does the pairing.
+- Logging is one tap, and the flag comes after, on the confirmation that names what was just written. A flag is wanted on maybe one event in ten, mostly to say the time needs fixing, so it is not worth a question in front of every log.
+- **There is no time picker on the watch.** An event is logged at the moment it happens, and something noticed an hour late is flagged here and given its real time on the phone, which is one screen instead of a row of offsets nobody would reach for in the dark.
+- Events are 10 bytes each in a ring of their own, mirrored to `/.system/eventlog.dat`, released only once the phone says it stored them, and **released by sequence number rather than by time**, because two events can land in the same minute, which the activity log's ordering rule forbids and this one has to allow.
+- The ring, the file mirror and the release are the activity log's, parameterised and shared rather than copied. The BLE service `00070000-78fc-48fe-8e23-433b3a1942d0` hands events out and takes the slot table in, the table arriving as one transaction the watch accepts or refuses whole, since half a table is worse than none.
+- The table lives in `/.system/logslots.dat` with the revision the phone gave it, reported back in the status, so the phone can tell whether the wrist is showing what it last sent.
+
+The event log, the slot table and their validation are tested on the host, in `tests/eventlog/` and `tests/logslots/`.
+
 ## Apps left out
 
 Paint, Paddle, Twos, Dice and the Metronome are not built into this firmware. They cost flash that the work above needed and none of them were being used. Navigation and Motion are left out upstream already, so nothing else is missing.
@@ -155,7 +172,6 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - 8464a0ff fix(watchface): show "?" rather than 0 for a heart rate that has no reading
 - 30ab9f09 fix(activity): stop a background poll from killing a manual measurement
 - 0765c1d6 feat(activity): log the readings a manual heart rate check produces
-- feat(activity): stop spending two bytes a record saying motion was not measured
 - 43d0f260 chore(apps): put the sleep app before steps in the app list
 - 44fc01be fix(heartrate): compare the DC residual to the peak, not to a fixed number
 - e71ea2ad perf(heartrate): show a coarse reading off half a window, then refine it
@@ -165,6 +181,14 @@ Oldest first, as conventional commits. The history was squashed into one commit 
 - bad42e93 feat(pomodoro): add the app screen and wire it into the launcher
 - 738499c3 feat(timer): ring until told to stop instead of buzzing once
 - c08e7f19 feat(stopwatch): keep a run going after the app is left
+- 7d365dd5 feat(activity): stop spending two bytes a record saying motion was not measured
+- 87a28801 refactor(log): share the ring, the file mirror and the release
+- 8ea4dcd2 feat(log): keep the events the wearer logs, numbered so a host can acknowledge them
+- 8f5f2b6c feat(log): hold the table of slots the phone pushes, and refuse one that does not hold together
+- d8bbef7f feat(log): hand the event log and the slot table over BLE
+- f560f784 feat(log): let an event be flagged after it was logged
+- 40147a8d refactor(datetime): one place that turns the clock into epoch seconds
+- 9c3524e7 feat(logging): a watch app built out of the table the phone pushed
 
 Plus the commits that write this list, which cannot list their own hash, and the odd formatting or gitignore commit not worth a line.
 
