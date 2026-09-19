@@ -101,6 +101,8 @@ Two controls differ from wasp-os, both forced by the firmware. Swiping down chan
 
 Both stock apps were changed so that leaving them does not throw away what they were doing.
 
+The timer also opens on the length it was last started with, instead of on zero. A timer is set to the same ten minutes twice in a row far more often than not, so counting back down to zero and leaving the wearer to dial it in again was work the app was asking for nothing. That length is what the counters show whenever there is nothing to count down: when the app is opened, when the long press resets it, and when the ringing is answered. It lives in the timer controller rather than in the screen, which is deleted the moment the app is left, and is not written to flash, since the settings file loses everything it holds when its version is bumped. Pausing is untouched and still shows the time remaining.
+
 The timer used to buzz once, for 35 milliseconds, when it ran out. From a pocket that was easy to miss, which defeats the point of setting one. It now rings the way the alarm does, a pulse every second, until someone presses Stop or the side button, and gives up after a minute if nobody answers. The countdown itself always ran in the background: it is a FreeRTOS timer, and the watch wakes itself and brings the app back when it expires.
 
 The stopwatch kept its state inside the screen, and the screen is deleted as soon as anything else is shown, so glancing at the watch face during a run lost it. Upstream fixed this by moving the state into a controller that outlives the screen, and that work is taken from upstream unchanged rather than rewritten, so nothing here has to be reconciled when this fork eventually merges with it. Laps, pauses and the elapsed time all survive leaving the app.
@@ -203,7 +205,7 @@ Logging through the day:
 Other apps:
 
 - A Pomodoro app: a queue of timers that chain into each other.
-- The Timer rings until told to stop instead of buzzing once.
+- The Timer rings until told to stop instead of buzzing once, and opens on the length last used.
 - The Stopwatch keeps a run going after the app is left.
 - The sleep app sits before steps in the app list, and four games and the Metronome are dropped for flash.
 
