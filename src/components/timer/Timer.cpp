@@ -7,6 +7,7 @@ Timer::Timer(void* const timerData, TimerCallbackFunction_t timerCallbackFunctio
 }
 
 void Timer::StartTimer(std::chrono::milliseconds duration) {
+  lastDuration = duration;
   xTimerChangePeriod(timer, pdMS_TO_TICKS(duration.count()), 0);
   xTimerStart(timer, 0);
 }

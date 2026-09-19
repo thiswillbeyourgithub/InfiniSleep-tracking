@@ -78,7 +78,9 @@ Timer::Timer(Controllers::Timer& timerController, Controllers::MotorController& 
   if (timer.IsRunning()) {
     SetTimerRunning();
   } else {
-    SetTimerStopped();
+    // Opening the app on the last length used rather than on zero, which is the same state a
+    // finished timer is left in.
+    Reset();
   }
 
   taskRefresh = lv_task_create(RefreshTaskCallback, LV_DISP_DEF_REFR_PERIOD, LV_TASK_PRIO_MID, this);
@@ -169,8 +171,20 @@ void Timer::ToggleRunning() {
 }
 
 void Timer::Reset() {
-  DisplayTime();
+  ShowLastDuration();
   SetTimerStopped();
+}
+
+/* What the counters go back to once there is nothing left to count down. The time remaining would
+ * be zero here, and zero is never what the wearer wants next: the same ten minutes they just used
+ * is, so Start is the only press left to make. */
+void Timer::ShowLastDuration() {
+  const auto duration = std::chrono::duration_cast<std::chrono::seconds>(timer.GetLastDuration());
+  minuteCounter.SetValue(duration.count() / 60);
+  secondCounter.SetValue(duration.count() % 60);
+  // Kept in step with the counters, since DisplayTime only writes to them when this changes and
+  // would otherwise leave the old length on screen for the first second of the next run.
+  displaySeconds = duration;
 }
 
 void Timer::SetAlerting() {

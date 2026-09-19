@@ -34,6 +34,7 @@ namespace Pinetime::Applications {
       void SetTimerStopped();
       void UpdateMask();
       void DisplayTime();
+      void ShowLastDuration();
       Pinetime::Controllers::Timer& timer;
       Pinetime::Controllers::MotorController& motorController;
       Pinetime::System::WakeLock wakeLock;
