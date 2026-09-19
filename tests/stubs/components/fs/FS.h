@@ -28,12 +28,25 @@ namespace Pinetime {
       bool exists = false;
       bool dirExists = false;
 
+      /// How many times the flash has been reached, either way. Counted because on the watch it
+      /// matters not only what ends up in the file but which task put it there: the external flash
+      /// is powered down while the watch sleeps, so code running on the BLE host task must leave it
+      /// alone and let the system task mirror things out when the watch is awake.
+      int reads = 0;
+      int writes = 0;
+
       int FileOpen(lfs_file_t* file, const char*, int flags) {
         if ((flags & LFS_O_RDONLY) && !exists) {
           return -1;
         }
         file->flags = flags;
         file->pos = 0;
+        if (flags & LFS_O_RDONLY) {
+          reads++;
+        }
+        if (flags & (LFS_O_WRONLY | LFS_O_CREAT)) {
+          writes++;
+        }
         if (flags & LFS_O_TRUNC) {
           contents.clear();
         }

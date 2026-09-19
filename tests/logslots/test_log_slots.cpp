@@ -75,6 +75,7 @@ int main() {
       LogSlots table(fs);
       table.Init();
       CHECK(PushExample(table, 12));
+      table.Flush();  // the system task's pass, without which nothing is on flash
     }
     LogSlots reloaded(fs);
     reloaded.Init();
@@ -91,11 +92,17 @@ int main() {
     table.Init();
     CHECK(PushExample(table, 3));
 
-    // A slot whose parent is not a group.
+    table.Flush();
+
+    // A slot whose parent is not a group. The arriving slots go over the ones being shown, so a
+    // refused table leaves nothing until the next flush reads the file back: the watch offers
+    // nothing for a moment rather than half of two tables.
     table.BeginUpdate(4);
     table.AddSlot(Slot(1, LogSlot::noParent, LogSlotBehaviour::Punctual, "Medication"));
     table.AddSlot(Slot(2, 1, LogSlotBehaviour::Punctual, "Inside a punctual slot"));
     CHECK(!table.CommitUpdate());
+    CHECK(table.Count() == 0);
+    table.Flush();
     CHECK(table.Revision() == 3);
     CHECK(table.Count() == 5);
 
@@ -103,6 +110,7 @@ int main() {
     table.BeginUpdate(5);
     table.AddSlot(Slot(1, 40, LogSlotBehaviour::Punctual, "Orphan"));
     CHECK(!table.CommitUpdate());
+    table.Flush();
     CHECK(table.Revision() == 3);
 
     // Two slots with the same id, which an event could not tell apart.
@@ -110,18 +118,21 @@ int main() {
     table.AddSlot(Slot(1, LogSlot::noParent, LogSlotBehaviour::Punctual, "One"));
     table.AddSlot(Slot(1, LogSlot::noParent, LogSlotBehaviour::Punctual, "Also one"));
     CHECK(!table.CommitUpdate());
+    table.Flush();
     CHECK(table.Revision() == 3);
 
     // No label to print.
     table.BeginUpdate(7);
     table.AddSlot(Slot(1, LogSlot::noParent, LogSlotBehaviour::Punctual, ""));
     CHECK(!table.CommitUpdate());
+    table.Flush();
     CHECK(table.Revision() == 3);
 
     // The id that means "no parent" cannot also be a slot.
     table.BeginUpdate(8);
     table.AddSlot(Slot(LogSlot::noParent, LogSlot::noParent, LogSlotBehaviour::Punctual, "Reserved"));
     CHECK(!table.CommitUpdate());
+    table.Flush();
     CHECK(table.Revision() == 3);
 
     // And the table that was there all along is still readable.
@@ -141,11 +152,14 @@ int main() {
     CHECK(table.CommitUpdate());
     CHECK(table.Count() == 3);
 
+    table.Flush();
+
     table.BeginUpdate(2);
     table.AddSlot(Slot(1, LogSlot::noParent, LogSlotBehaviour::Group, "Moods"));
     table.AddSlot(Slot(2, 1, LogSlotBehaviour::Group, "Bad ones"));
     table.AddSlot(Slot(3, 2, LogSlotBehaviour::Group, "Worse ones"));
     CHECK(!table.CommitUpdate());
+    table.Flush();
     CHECK(table.Revision() == 1);
   }
 
@@ -175,6 +189,7 @@ int main() {
     LogSlots table(fs);
     table.Init();
     CHECK(PushExample(table, 2));
+    table.Flush();
 
     table.BeginUpdate(3);
     bool refused = false;
@@ -188,6 +203,7 @@ int main() {
     }
     CHECK(refused);
     CHECK(!table.CommitUpdate());  // the update was abandoned, so there is nothing to commit
+    table.Flush();
     CHECK(table.Revision() == 2);
     CHECK(table.Count() == 5);
   }
@@ -229,10 +245,53 @@ int main() {
       table.Clear();
       CHECK(table.Count() == 0);
       CHECK(table.Revision() == 0);
+      table.Flush();
     }
     LogSlots reloaded(fs);
     reloaded.Init();
     CHECK(reloaded.Count() == 0);
+  }
+
+  {
+    printf("receiving a table touches no flash until the watch is awake\n");
+    FS fs;
+    LogSlots table(fs);
+    table.Init();
+    const int afterInit = fs.reads + fs.writes;
+
+    // Every one of these runs on the BLE host task, where the external flash may be powered down
+    // and the SPI peripheral disabled. A write there waits forever on a completion that never
+    // comes, holding the display until the watchdog reboots the watch, which is what a phone
+    // pushing a table on connecting used to do to a watch asleep on a wrist.
+    CHECK(PushExample(table, 21));
+    CHECK(fs.reads + fs.writes == afterInit);
+    CHECK(table.IsDirty());
+
+    // The system task's pass, which is the only place the flash is reached.
+    table.Flush();
+    CHECK(fs.writes > 0);
+    CHECK(!table.IsDirty());
+
+    // A refused table is the other way in, since giving up used to mean reading the file back on
+    // the spot. It is put off in the same way, and the table that was there comes back with it.
+    const int afterWrite = fs.reads + fs.writes;
+    table.BeginUpdate(22);
+    table.AddSlot(Slot(1, 40, LogSlotBehaviour::Punctual, "Orphan"));
+    CHECK(!table.CommitUpdate());
+    CHECK(fs.reads + fs.writes == afterWrite);
+    CHECK(table.IsDirty());
+    CHECK(table.Count() == 0);
+
+    table.Flush();
+    CHECK(fs.reads + fs.writes > afterWrite);
+    CHECK(!table.IsDirty());
+    CHECK(table.Revision() == 21);
+    CHECK(table.Count() == 5);
+
+    // Flushing again with nothing to say leaves the flash alone.
+    const int afterReload = fs.reads + fs.writes;
+    table.Flush();
+    CHECK(fs.reads + fs.writes == afterReload);
   }
 
   if (failures == 0) {
