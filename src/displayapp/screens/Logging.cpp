@@ -80,6 +80,7 @@ void Logging::ClearScreen() {
   valueLabel = nullptr;
   slider = nullptr;
   logButton = nullptr;
+  backButton = nullptr;
   flagButton = nullptr;
   flagLabel = nullptr;
 }
@@ -244,9 +245,28 @@ void Logging::BuildConfirmation(const char* what) {
   lv_label_set_text(line, stored ? what : "Not logged");
   lv_obj_align(line, nullptr, LV_ALIGN_CENTER, 0, 0);
 
+  /* A way back that does not mean waiting out confirmationMs, because logging several things in a
+   * row is the normal case and four seconds of watching a tick each time is not. Swiping right and
+   * the side button already do this; the button is here because on this screen the thumb is already
+   * at the bottom, next to the flag it may also want. */
+  backButton = lv_btn_create(lv_scr_act(), nullptr);
+  backButton->user_data = this;
+  lv_obj_set_event_cb(backButton, EventHandler);
+  lv_obj_set_style_local_bg_color(backButton, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, Colors::bgAlt);
+  lv_obj_t* backLabel = lv_label_create(backButton, nullptr);
+  lv_label_set_text_static(backLabel, "Back");
+
   if (!stored) {
+    /* Nothing was written, so there is nothing to flag and the way back gets the whole row. */
+    lv_obj_set_size(backButton, LV_HOR_RES - 80, 50);
+    lv_obj_align(backButton, nullptr, LV_ALIGN_IN_BOTTOM_MID, 0, -8);
     return;
   }
+
+  /* Side by side, each taking half of the row once the margins and the gap between them are out. */
+  constexpr int16_t buttonWidth = (LV_HOR_RES - 30) / 2;
+  lv_obj_set_size(backButton, buttonWidth, 50);
+  lv_obj_align(backButton, nullptr, LV_ALIGN_IN_BOTTOM_LEFT, 10, -8);
 
   /* Flagging is offered here rather than asked for beforehand: logging something is meant to be a
    * single tap, and a flag is how the wearer says to come back to this one on the phone, usually
@@ -255,8 +275,8 @@ void Logging::BuildConfirmation(const char* what) {
   flagButton->user_data = this;
   lv_obj_set_event_cb(flagButton, EventHandler);
   lv_obj_set_style_local_bg_color(flagButton, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, Colors::bgAlt);
-  lv_obj_set_size(flagButton, LV_HOR_RES - 80, 50);
-  lv_obj_align(flagButton, nullptr, LV_ALIGN_IN_BOTTOM_MID, 0, -8);
+  lv_obj_set_size(flagButton, buttonWidth, 50);
+  lv_obj_align(flagButton, nullptr, LV_ALIGN_IN_BOTTOM_RIGHT, -10, -8);
   flagLabel = lv_label_create(flagButton, nullptr);
   lv_label_set_text_static(flagLabel, "Flag");
 }
@@ -335,6 +355,11 @@ void Logging::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
     char line[lineSize];
     snprintf(line, sizeof(line), "%s %d", slot == nullptr ? "?" : slot->label, static_cast<int>(value));
     Log(subjectSlot, LoggedEventType::Valued, static_cast<uint8_t>(value), line);
+    return;
+  }
+
+  if (obj == backButton) {
+    BuildMenu();
     return;
   }
 

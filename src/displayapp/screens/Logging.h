@@ -61,9 +61,10 @@ namespace Pinetime {
          * settings menus already use. */
         static constexpr uint8_t itemsPerPage = 4;
 
-        /* How long the confirmation stays before the menu comes back. Long enough to read it and
-         * to reach the flag, short enough that a wearer who has dropped their wrist is back where
-         * they would want to start next time. */
+        /* How long the confirmation stays before the menu comes back on its own. Long enough to
+         * read it and to reach the flag, short enough that a wearer who has dropped their wrist is
+         * back where they would want to start next time. Anyone still looking at it and wanting to
+         * log the next thing takes the Back button instead of waiting. */
         static constexpr uint32_t confirmationMs = 4000;
 
         static constexpr uint8_t initialValue = 5;
@@ -104,6 +105,7 @@ namespace Pinetime {
         lv_obj_t* valueLabel = nullptr;
         lv_obj_t* slider = nullptr;
         lv_obj_t* logButton = nullptr;
+        lv_obj_t* backButton = nullptr;
         lv_obj_t* flagButton = nullptr;
         lv_obj_t* flagLabel = nullptr;
         lv_task_t* taskRefresh = nullptr;
