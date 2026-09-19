@@ -2,6 +2,9 @@
 
 #include <cstdint>
 
+#include <FreeRTOS.h>
+#include <semphr.h>
+
 #include "components/fs/FS.h"
 
 namespace Pinetime {
@@ -63,17 +66,21 @@ namespace Pinetime {
       /// Starts receiving a table.
       ///
       /// The slots arriving are written over the ones being shown rather than beside them, since a
-      /// second table's worth of RAM is a second table's worth LVGL does not get. A push that does
-      /// not hold together, or stops half way, is followed by reading the file back, so the watch
-      /// ends up showing what it last wrote down rather than half a table.
+      /// second table's worth of RAM is a second table's worth LVGL does not get. The table is
+      /// therefore emptied here rather than at the end: the logging app reads it from another task,
+      /// and an empty table is something it already knows how to draw, whereas a table half
+      /// overwritten by a push in flight is not. A push that does not hold together, or stops half
+      /// way, leaves it empty until the next Flush() reads the file back.
       void BeginUpdate(uint16_t revision);
 
       /// Appends one slot to the table being received. False when there is no room, which abandons
       /// the update rather than committing half a table.
       bool AddSlot(const LogSlot& slot);
 
-      /// Checks the table over and, if it holds together, starts showing it and writes it out.
-      /// False leaves the watch showing what it had.
+      /// Checks the table over and, if it holds together, starts showing it. False leaves the
+      /// watch showing nothing until Flush() puts the previous table back.
+      ///
+      /// Nothing is written to flash here: see Flush() for why the task this runs on must not.
       bool CommitUpdate();
 
       void AbandonUpdate();
@@ -103,6 +110,27 @@ namespace Pinetime {
 
       void Clear();
 
+      /// True when the file no longer matches what the watch is showing, either way round.
+      bool IsDirty() const {
+        return dirty || pendingReload;
+      }
+
+      /// Brings the file and the table back into step, writing one out or reading the other back.
+      ///
+      /// Split from the methods that change the table because those run on the BLE host task, which
+      /// must not touch flash: the PineTime powers the external flash down and disables the SPI
+      /// peripheral while the watch sleeps, and a write in that state blocks forever on a DMA
+      /// completion that never comes, taking the SPI mutex and therefore the display with it, until
+      /// the watchdog reboots the watch. A table arrives exactly when that is most likely, since
+      /// the phone pushes it on connecting and the watch is usually asleep on a wrist at the time.
+      /// So the table in RAM is the authority and this is its mirror, taken by the system task
+      /// whenever the watch is awake anyway.
+      ///
+      /// Losing a committed table to a flat battery before the next wake costs nothing: the file
+      /// still holds the older revision, and the phone pushes again as soon as it sees one it did
+      /// not send.
+      void Flush();
+
     private:
       static constexpr uint8_t fileFormatVersion = 1;
       static constexpr const char* filePath = "/.system/logslots.dat";
@@ -110,6 +138,13 @@ namespace Pinetime {
       /// Whether the table being received holds together: ids unique, parents present and groups,
       /// groups no deeper than maxDepth, labels not empty.
       bool IsValid(uint8_t entries) const;
+
+      /// What AbandonUpdate does once the lock is held, so that the mutators can give up part way
+      /// through without taking a mutex they are already holding.
+      void AbandonUpdateLocked();
+
+      bool Lock() const;
+      void Unlock() const;
 
       void LoadFromFile();
       void SaveToFile() const;
@@ -125,6 +160,22 @@ namespace Pinetime {
       bool updating = false;
       uint8_t incoming = 0;
       uint16_t incomingRevision = 0;
+
+      /// Set by a commit, cleared by the Flush() that writes the table out.
+      bool dirty = false;
+
+      /// Set when a push was given up on, which leaves the table empty because the slots arriving
+      /// went over the ones being shown. Cleared by the Flush() that reads the file back.
+      bool pendingReload = false;
+
+      /// The table is written by the BLE host task, as the phone pushes it, and read by the display
+      /// task, as the logging app draws it, so everything that walks the slots takes this. Count()
+      /// and Revision() do not: a single aligned scalar needs no help.
+      ///
+      /// It does not extend to the slots At() and Find() hand out either, and does not need to: a
+      /// push empties the table before it touches a single slot, so a caller comes away either with
+      /// a pointer to a slot nobody is writing or with nullptr.
+      mutable SemaphoreHandle_t mutex = nullptr;
     };
   }
 }

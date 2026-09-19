@@ -232,6 +232,12 @@ void SystemTask::Work() {
     if (state == SystemTaskState::Running && activityLogController.IsDirty()) {
       activityLogController.Flush();
     }
+    // Same reason, one step removed: the table of slots is pushed by the phone on connecting,
+    // which is usually while the watch is asleep on a wrist, and the BLE host task that receives it
+    // must no more reach the flash than the logging code does.
+    if (state == SystemTaskState::Running && logSlots.IsDirty()) {
+      logSlots.Flush();
+    }
 
     // The night's records only exist in RAM until the watch is next woken, so a battery that
     // dies before morning takes them with it. This is the one moment where that stops being

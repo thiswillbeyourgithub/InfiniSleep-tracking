@@ -20,37 +20,71 @@ LogSlots::LogSlots(Controllers::FS& fs) : fs {fs} {
 }
 
 void LogSlots::Init() {
+  if (mutex == nullptr) {
+    mutex = xSemaphoreCreateMutex();
+  }
+
+  Lock();
   LoadFromFile();
+  Unlock();
+}
+
+bool LogSlots::Lock() const {
+  // Before Init() there is no other task to race against, so carrying on unlocked is correct
+  // rather than merely convenient.
+  return mutex != nullptr && xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE;
+}
+
+void LogSlots::Unlock() const {
+  if (mutex != nullptr) {
+    xSemaphoreGive(mutex);
+  }
 }
 
 void LogSlots::BeginUpdate(uint16_t revision) {
+  Lock();
+  // The arriving slots are about to be written over the ones being shown, so the table stops being
+  // a table now, while the logging app can still be told so. Leaving the count up and emptying it
+  // at the end instead would give that app, which runs on another task, a window in which it reads
+  // slots that are half of the old table and half of the new one.
+  count = 0;
+  this->revision = 0;
   updating = true;
   incoming = 0;
   incomingRevision = revision;
+  Unlock();
 }
 
 bool LogSlots::AddSlot(const LogSlot& slot) {
+  Lock();
   if (!updating || incoming == maxSlots) {
-    AbandonUpdate();
+    AbandonUpdateLocked();
+    Unlock();
     return false;
   }
 
-  slots[incoming] = slot;
   // Whatever the phone sent, the label ends where the watch says it does: it is printed straight
-  // onto a screen from here.
-  slots[incoming].label[LogSlot::labelSize - 1] = '\0';
+  // onto a screen from here. Terminated in this copy rather than in the table, so that the table
+  // never holds a label without a terminator even for the few instructions in between.
+  LogSlot staged = slot;
+  staged.label[LogSlot::labelSize - 1] = '\0';
+  slots[incoming] = staged;
   incoming++;
+  Unlock();
   return true;
 }
 
 bool LogSlots::CommitUpdate() {
+  Lock();
   if (!updating) {
+    Unlock();
     return false;
   }
 
   if (!IsValid(incoming)) {
     NRF_LOG_WARNING("[LogSlots] Rejecting a table of %u slots that does not hold together", incoming);
-    AbandonUpdate();
+    AbandonUpdateLocked();
+    Unlock();
     return false;
   }
 
@@ -58,19 +92,30 @@ bool LogSlots::CommitUpdate() {
   revision = incomingRevision;
   updating = false;
   incoming = 0;
-  SaveToFile();
+  // The file is brought into step by the system task instead: see Flush().
+  dirty = true;
+  pendingReload = false;
   NRF_LOG_INFO("[LogSlots] Showing revision %u, %u slots", revision, count);
+  Unlock();
   return true;
 }
 
 void LogSlots::AbandonUpdate() {
+  Lock();
+  AbandonUpdateLocked();
+  Unlock();
+}
+
+void LogSlots::AbandonUpdateLocked() {
   updating = false;
   incoming = 0;
   // The slots that arrived went over the ones being shown, so what the watch had is whatever it
-  // last wrote down.
+  // last wrote down. Reading it back is left to Flush(), which runs where reaching the flash is
+  // allowed; until then the watch offers nothing rather than half a table.
   count = 0;
   revision = 0;
-  LoadFromFile();
+  dirty = false;
+  pendingReload = true;
 }
 
 bool LogSlots::IsValid(uint8_t entries) const {
@@ -120,19 +165,27 @@ bool LogSlots::IsValid(uint8_t entries) const {
 }
 
 const LogSlot* LogSlots::At(uint8_t index) const {
-  return index < count ? &slots[index] : nullptr;
+  Lock();
+  const LogSlot* slot = index < count ? &slots[index] : nullptr;
+  Unlock();
+  return slot;
 }
 
 const LogSlot* LogSlots::Find(uint8_t id) const {
+  Lock();
+  const LogSlot* found = nullptr;
   for (uint8_t i = 0; i < count; i++) {
     if (slots[i].id == id) {
-      return &slots[i];
+      found = &slots[i];
+      break;
     }
   }
-  return nullptr;
+  Unlock();
+  return found;
 }
 
 uint8_t LogSlots::ChildrenOf(uint8_t parentId, uint8_t* out, uint8_t max) const {
+  Lock();
   uint8_t found = 0;
   for (uint8_t i = 0; i < count && found < max; i++) {
     if (slots[i].parent == parentId) {
@@ -140,32 +193,55 @@ uint8_t LogSlots::ChildrenOf(uint8_t parentId, uint8_t* out, uint8_t max) const 
       found++;
     }
   }
+  Unlock();
   return found;
 }
 
 bool LogSlots::HasSingleGroup() const {
+  Lock();
+  // One exit, because every way out of here has to give the lock back.
+  bool single = true;
   uint8_t groups = 0;
   for (uint8_t i = 0; i < count; i++) {
     if (slots[i].parent != LogSlot::noParent) {
       continue;
     }
     if (slots[i].behaviour != LogSlotBehaviour::Group) {
-      return false;
+      single = false;
+      break;
     }
     groups++;
     if (groups > 1) {
-      return false;
+      single = false;
+      break;
     }
   }
-  return groups == 1;
+  Unlock();
+  return single && groups == 1;
 }
 
 void LogSlots::Clear() {
+  Lock();
   count = 0;
   revision = 0;
   updating = false;
   incoming = 0;
-  SaveToFile();
+  dirty = true;
+  pendingReload = false;
+  Unlock();
+}
+
+void LogSlots::Flush() {
+  Lock();
+  if (pendingReload) {
+    LoadFromFile();
+    pendingReload = false;
+    dirty = false;
+  } else if (dirty) {
+    SaveToFile();
+    dirty = false;
+  }
+  Unlock();
 }
 
 void LogSlots::LoadFromFile() {
