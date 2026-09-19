@@ -263,8 +263,9 @@ void Logging::BuildConfirmation(const char* what) {
     return;
   }
 
-  /* Side by side, each taking half of the row once the margins and the gap between them are out. */
-  constexpr int16_t buttonWidth = (LV_HOR_RES - 30) / 2;
+  /* Side by side, each taking half of the row once the margins and the gap between them are out.
+   * Not constexpr: LV_HOR_RES asks the driver for the width rather than naming it. */
+  const lv_coord_t buttonWidth = (LV_HOR_RES - 30) / 2;
   lv_obj_set_size(backButton, buttonWidth, 50);
   lv_obj_align(backButton, nullptr, LV_ALIGN_IN_BOTTOM_LEFT, 10, -8);
 
