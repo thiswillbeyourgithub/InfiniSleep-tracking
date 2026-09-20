@@ -160,6 +160,7 @@ tests/logslots/run.sh          # the slot table: what a phone may push and what 
 tests/heartrate/run.sh         # heart rate latency and accuracy, likewise, on a synthetic pulse
 tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an hour in microseconds
 tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it takes to wrap round
+tests/battery/run.sh           # the battery curve, against a reference discharge, and its calibration
 ```
 
 ## Everything this fork changes
@@ -189,6 +190,12 @@ Heart rate:
 - The DC residual check compared against the peak rather than a fixed number, which is why strong pulses never converged at all.
 - A background poll no longer kills a measurement the wearer started.
 - Self started measurements are no longer published as a live heart rate.
+
+Battery:
+
+- A voltage-to-percent curve of 21 points instead of 6, so the number falls at a steady rate instead of sticking around half and then dropping ten points at once.
+- 100% held until the cell has settled off the charger, so a fresh charge no longer appears to collapse in the first hours.
+- The voltage the charger stopped at is remembered and used to scale every later reading, which takes the divider's and the ADC reference's tolerance out of the number.
 
 Motion and steps:
 
