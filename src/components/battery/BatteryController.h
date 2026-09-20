@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <components/battery/BatteryCurve.h>
 #include <drivers/include/nrfx_saadc.h>
 #include <systemtask/SystemTask.h>
 
@@ -33,6 +34,14 @@ namespace Pinetime {
       }
 
     private:
+      /// The highest voltage seen while charging was finished, which is this watch's own reading of
+      /// a voltage the curve knows the real value of.
+      ///
+      /// Deliberately not written to flash. It is relearned the first time the watch is charged,
+      /// which is every few days, so persisting it would buy one cycle of accuracy after a reboot
+      /// in exchange for a flash write the watch otherwise never makes.
+      uint16_t observedTermination = BatteryCurve::nominalTermination;
+
       static Battery* instance;
       nrf_saadc_value_t saadc_value;
 

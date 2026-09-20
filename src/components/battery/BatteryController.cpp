@@ -1,5 +1,4 @@
 #include "components/battery/BatteryController.h"
-#include "utility/LinearApproximation.h"
 #include "drivers/PinMap.h"
 #include <hal/nrf_gpio.h>
 #include <nrfx_saadc.h>
@@ -61,9 +60,6 @@ void Battery::SaadcInit() {
 }
 
 void Battery::SaadcEventHandler(nrfx_saadc_evt_t const* p_event) {
-  static const Utility::LinearApproximation<uint16_t, uint8_t, 6> approx {
-    {{{3500, 0}, {3616, 3}, {3723, 22}, {3776, 48}, {3979, 79}, {4180, 100}}}};
-
   if (p_event->type == NRFX_SAADC_EVT_DONE) {
 
     APP_ERROR_CHECK(nrfx_saadc_buffer_convert(&saadc_value, 1));
@@ -75,10 +71,21 @@ void Battery::SaadcEventHandler(nrfx_saadc_evt_t const* p_event) {
     // p_event->data.done.p_buffer[0] = (adc_voltage / reference_voltage) * 1024
     voltage = p_event->data.done.p_buffer[0] * (8 * 600) / 1024;
 
+    if (isFull && BatteryCurve::IsCredibleTermination(voltage)) {
+      // Charging has stopped with the charger still holding the cell, so this reading is the
+      // charger's termination voltage as this watch measures it. Comparing it against the voltage
+      // a charger really terminates at gives the error in the divider and the ADC reference, and
+      // every later reading is corrected by it. The highest one seen is kept rather than the
+      // latest, because a charge interrupted early terminates low and would otherwise drag the
+      // correction with it; a full charge puts it back.
+      observedTermination = std::max(observedTermination, voltage);
+    }
+
     uint8_t newPercent = 100;
     if (!isFull) {
       // max. voltage while charging is higher than when discharging
-      newPercent = std::min(approx.GetValue(voltage), isCharging ? uint8_t {99} : uint8_t {100});
+      newPercent = std::min(BatteryCurve::PercentFromVoltage(BatteryCurve::Calibrated(voltage, observedTermination)),
+                            isCharging ? uint8_t {99} : uint8_t {100});
     }
 
     if ((isPowerPresent && newPercent > percentRemaining) || (!isPowerPresent && newPercent < percentRemaining) || firstMeasurement) {
