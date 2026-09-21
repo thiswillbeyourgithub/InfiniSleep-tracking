@@ -13,7 +13,11 @@ namespace {
   };
 
   /// One slot on disk, which is the struct without whatever the compiler might pad it with.
-  constexpr uint8_t storedSlotSize = 3 + LogSlot::labelSize;
+  constexpr uint8_t storedSlotSize = 3 + colourBytes + LogSlot::labelSize;
+
+  /// Where the label starts inside a stored slot, after the id, the parent, the behaviour and the
+  /// colour.
+  constexpr uint8_t storedLabelOffset = 3 + colourBytes;
 }
 
 LogSlots::LogSlots(Controllers::FS& fs) : fs {fs} {
@@ -273,7 +277,8 @@ void LogSlots::LoadFromFile() {
     slots[i].id = stored[0];
     slots[i].parent = stored[1];
     slots[i].behaviour = static_cast<LogSlotBehaviour>(stored[2]);
-    std::memcpy(slots[i].label, &stored[3], LogSlot::labelSize);
+    slots[i].colour = ColourFromBytes(&stored[3]);
+    std::memcpy(slots[i].label, &stored[storedLabelOffset], LogSlot::labelSize);
     slots[i].label[LogSlot::labelSize - 1] = '\0';
     count = i + 1;
   }
@@ -314,7 +319,8 @@ void LogSlots::SaveToFile() const {
     stored[0] = slots[i].id;
     stored[1] = slots[i].parent;
     stored[2] = static_cast<uint8_t>(slots[i].behaviour);
-    std::memcpy(&stored[3], slots[i].label, LogSlot::labelSize);
+    ColourToBytes(slots[i].colour, &stored[3]);
+    std::memcpy(&stored[storedLabelOffset], slots[i].label, LogSlot::labelSize);
     fs.FileWrite(&file, stored, storedSlotSize);
   }
 

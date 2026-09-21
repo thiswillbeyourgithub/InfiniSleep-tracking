@@ -112,6 +112,16 @@ const char* Logging::IconFor(const LogSlot& slot, bool running) {
   }
 }
 
+lv_color_t Logging::ColourFor(const LogSlot& slot) {
+  if (slot.colour == LogSlot::noColour) {
+    return LV_COLOR_YELLOW;
+  }
+  /* Through LVGL rather than by writing the packed value into lv_color_t, because this build swaps
+   * the two bytes of a 16 bit colour for the display's benefit and a value assembled by hand would
+   * come out with red and blue exchanged. 0x00RRGGBB is what lv_color_hex already takes. */
+  return lv_color_hex(slot.colour);
+}
+
 void Logging::BuildMenu() {
   ClearScreen();
   view = View::Menu;
@@ -129,6 +139,12 @@ void Logging::BuildMenu() {
     const LogSlot* group = logSlots.Find(openGroup);
     if (group != nullptr) {
       titleText = group->label;
+      if (group->colour != LogSlot::noColour) {
+        /* The group's own colour on the heading, so that a group opened from a coloured row says
+         * which one it was. Nothing below it is coloured by the group: the phone has already
+         * pushed that colour down onto the children that take it. */
+        lv_obj_set_style_local_text_color(title, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, ColourFor(*group));
+      }
     }
   }
   if (PageCount() > 1) {
@@ -175,10 +191,13 @@ void Logging::BuildMenu() {
 
     lv_obj_t* icon = lv_label_create(button, nullptr);
     lv_label_set_text_static(icon, IconFor(*slot, running));
+    /* Running wins over the slot's own colour: which of them is open right now is the one thing on
+     * this screen that changes without the wearer doing anything, so it has to shout. The colour is
+     * what the slot is rather than what it is doing, and the icon has already changed to a stop. */
     lv_obj_set_style_local_text_color(icon,
-                                     LV_LABEL_PART_MAIN,
-                                     LV_STATE_DEFAULT,
-                                     running ? Colors::highlight : LV_COLOR_YELLOW);
+                                      LV_LABEL_PART_MAIN,
+                                      LV_STATE_DEFAULT,
+                                      running ? Colors::highlight : ColourFor(*slot));
     lv_obj_align(icon, nullptr, LV_ALIGN_IN_LEFT_MID, 4, 0);
 
     lv_obj_t* label = lv_label_create(button, nullptr);

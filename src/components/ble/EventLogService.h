@@ -35,10 +35,13 @@ namespace Pinetime {
     ///   0x03 <uint32 upTo>        Release, host has durably stored everything up to and including
     ///                             upTo, the watch may reclaim the space
     ///   0x10 <uint16 revision>    BeginSlots, start pushing a table
-    ///   0x11 <uint8 id> <uint8 parent> <uint8 behaviour> <label>
+    ///   0x11 <uint8 id> <uint8 parent> <uint8 behaviour>
+    ///        <uint8 red> <uint8 green> <uint8 blue> <label>
     ///                             AddSlot, label is up to 15 bytes of UTF-8, no terminator needed.
     ///                             parent 0xFF means the top of the table. behaviour is 0 group,
-    ///                             1 punctual, 2 continuous, 3 asks for a value.
+    ///                             1 punctual, 2 continuous, 3 asks for a value. A colour of black
+    ///                             means the host chose none and the watch picks; any inheriting
+    ///                             from a group is resolved by the host before sending.
     ///   0x12                      CommitSlots, show the table if it holds together
     ///
     /// Control point, watch notifies:
@@ -69,7 +72,10 @@ namespace Pinetime {
       void SubscribeNotification(uint16_t attributeHandle);
       void UnsubscribeNotification(uint16_t attributeHandle);
 
-      static constexpr uint8_t protocolVersion = 1;
+      /// Bumped to 2 when AddSlot gained a colour, which moved the label along by three bytes. A
+      /// host and a watch that disagree about this number refuse to talk, which is what stops an
+      /// older host's label bytes being read as a colour.
+      static constexpr uint8_t protocolVersion = 2;
 
     private:
       /// Bounds the buffer below. Twelve events is 120 bytes on the wire, which a host that
@@ -77,8 +83,8 @@ namespace Pinetime {
       static constexpr uint8_t maxEventsPerBatch = 12;
       static constexpr uint8_t bytesPerEvent = 10;
 
-      /// The longest command is a slot: three bytes of its own and a label.
-      static constexpr uint8_t maxCommandSize = 4 + LogSlot::labelSize;
+      /// The longest command is a slot: an opcode, three bytes of its own, a colour and a label.
+      static constexpr uint8_t maxCommandSize = 4 + colourBytes + LogSlot::labelSize;
 
       void HandleRequestEvents(uint16_t connectionHandle, uint32_t sinceSequence);
       void HandleRelease(uint16_t connectionHandle, uint32_t upToSequence);

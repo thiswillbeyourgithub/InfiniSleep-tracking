@@ -207,7 +207,10 @@ void EventLogService::HandleRelease(uint16_t connectionHandle, uint32_t upToSequ
 }
 
 void EventLogService::HandleAddSlot(uint16_t connectionHandle, const uint8_t* command, uint16_t size) {
-  if (size < 4) {
+  // The opcode, the id, the parent, the behaviour and the colour, with the label after them.
+  constexpr uint16_t labelOffset = 4 + colourBytes;
+
+  if (size < labelOffset) {
     NotifyError(connectionHandle, errorMalformedCommand);
     return;
   }
@@ -216,10 +219,11 @@ void EventLogService::HandleAddSlot(uint16_t connectionHandle, const uint8_t* co
   slot.id = command[1];
   slot.parent = command[2];
   slot.behaviour = static_cast<LogSlotBehaviour>(command[3]);
+  slot.colour = ColourFromBytes(&command[4]);
 
-  const uint16_t labelBytes = size - 4;
+  const uint16_t labelBytes = size - labelOffset;
   const uint16_t kept = labelBytes < LogSlot::labelSize - 1 ? labelBytes : LogSlot::labelSize - 1;
-  std::memcpy(slot.label, &command[4], kept);
+  std::memcpy(slot.label, &command[labelOffset], kept);
   slot.label[kept] = '\0';
 
   if (!slots.AddSlot(slot)) {

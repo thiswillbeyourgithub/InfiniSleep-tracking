@@ -36,13 +36,45 @@ namespace Pinetime {
       /// What a slot at the top of the table has for a parent.
       static constexpr uint8_t noParent = 0xFF;
 
+      /// A slot the phone chose no colour for, which the app then draws in its own.
+      ///
+      /// Black is the one colour that cannot be asked for, since it doubles as "none asked for".
+      /// That costs nothing in practice: the app draws on a black background, so a black icon is an
+      /// invisible one, and nobody picks it on purpose.
+      static constexpr uint32_t noColour = 0;
+
       /// The phone's own id for this slot, which is what an event carries. Never reused, so that an
       /// event logged against a slot the wearer has since retired still means what it meant.
       uint8_t id = 0;
       uint8_t parent = noParent;
       LogSlotBehaviour behaviour = LogSlotBehaviour::Punctual;
+
+      /// What the wearer asked this slot to be drawn in, as 0x00RRGGBB, or noColour.
+      ///
+      /// The phone works out inheritance before sending, so a slot that takes its group's colour
+      /// arrives already carrying it. That is deliberate: the watch draws one slot at a time and
+      /// would otherwise have to walk up the table for every row it paints.
+      uint32_t colour = noColour;
+
       char label[labelSize] = {};
     };
+
+    /// How a colour travels, on the wire and in the file: red, green, blue, one byte each.
+    ///
+    /// Written out here rather than at each end so the two cannot drift apart, and kept as three
+    /// separate bytes rather than a packed integer so that no end has to agree about byte order for
+    /// a value whose natural reading order is R, G, B.
+    static constexpr uint8_t colourBytes = 3;
+
+    inline uint32_t ColourFromBytes(const uint8_t* bytes) {
+      return (static_cast<uint32_t>(bytes[0]) << 16) | (static_cast<uint32_t>(bytes[1]) << 8) | static_cast<uint32_t>(bytes[2]);
+    }
+
+    inline void ColourToBytes(uint32_t colour, uint8_t* bytes) {
+      bytes[0] = static_cast<uint8_t>((colour >> 16) & 0xFF);
+      bytes[1] = static_cast<uint8_t>((colour >> 8) & 0xFF);
+      bytes[2] = static_cast<uint8_t>(colour & 0xFF);
+    }
 
     /// The table of slots the watch is showing, as the phone last pushed it.
     ///
@@ -132,7 +164,10 @@ namespace Pinetime {
       void Flush();
 
     private:
-      static constexpr uint8_t fileFormatVersion = 1;
+      /// Bumped to 2 when slots gained a colour. A file written by the older version is discarded
+      /// rather than read short, which costs nothing: the watch then reports revision 0, the phone
+      /// sees a revision it did not send, and pushes the table again.
+      static constexpr uint8_t fileFormatVersion = 2;
       static constexpr const char* filePath = "/.system/logslots.dat";
 
       /// Whether the table being received holds together: ids unique, parents present and groups,

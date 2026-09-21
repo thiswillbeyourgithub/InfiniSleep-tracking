@@ -19,11 +19,12 @@ static int failures = 0;
   } while (0)
 
 namespace {
-  LogSlot Slot(uint8_t id, uint8_t parent, LogSlotBehaviour behaviour, const char* label) {
+  LogSlot Slot(uint8_t id, uint8_t parent, LogSlotBehaviour behaviour, const char* label, uint32_t colour = LogSlot::noColour) {
     LogSlot slot;
     slot.id = id;
     slot.parent = parent;
     slot.behaviour = behaviour;
+    slot.colour = colour;
     std::snprintf(slot.label, LogSlot::labelSize, "%s", label);
     return slot;
   }
@@ -35,7 +36,7 @@ namespace {
     table.AddSlot(Slot(1, LogSlot::noParent, LogSlotBehaviour::Group, "Moods"));
     table.AddSlot(Slot(2, 1, LogSlotBehaviour::Valued, "Sad"));
     table.AddSlot(Slot(3, 1, LogSlotBehaviour::Valued, "Joyful"));
-    table.AddSlot(Slot(4, LogSlot::noParent, LogSlotBehaviour::Punctual, "Medication"));
+    table.AddSlot(Slot(4, LogSlot::noParent, LogSlotBehaviour::Punctual, "Medication", 0xE53935));
     table.AddSlot(Slot(5, LogSlot::noParent, LogSlotBehaviour::Continuous, "Napping"));
     return table.CommitUpdate();
   }
@@ -83,6 +84,10 @@ int main() {
     CHECK(reloaded.Revision() == 12);
     CHECK(std::strcmp(reloaded.Find(5)->label, "Napping") == 0);
     CHECK(reloaded.Find(5)->behaviour == LogSlotBehaviour::Continuous);
+    /* The colour is the wearer's own marking rather than anything the watch can work out again, so
+     * losing it to a reboot would leave the table looking wrong until the phone came back. */
+    CHECK(reloaded.Find(4)->colour == 0xE53935);
+    CHECK(reloaded.Find(5)->colour == LogSlot::noColour);
   }
 
   {
