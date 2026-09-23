@@ -495,8 +495,13 @@ void DisplayApp::Refresh() {
               case TouchEvents::SwipeDown:
                 LoadNewScreen(Apps::Notifications, DisplayApp::FullRefreshDirections::Down);
                 break;
+              // The light is the one thing wanted in the dark without looking, so it has the swipe
+              // that needs no aim. Quick settings, which holds it too, moved to the other side.
               case TouchEvents::SwipeRight:
-                LoadNewScreen(Apps::QuickSettings, DisplayApp::FullRefreshDirections::RightAnim);
+                LoadNewScreen(Apps::FlashLight, DisplayApp::FullRefreshDirections::RightAnim);
+                break;
+              case TouchEvents::SwipeLeft:
+                LoadNewScreen(Apps::QuickSettings, DisplayApp::FullRefreshDirections::LeftAnim);
                 break;
               case TouchEvents::DoubleTap:
                 PushMessageToSystemTask(System::Messages::GoToSleep);
@@ -525,7 +530,8 @@ void DisplayApp::Refresh() {
           if (currentApp == Apps::Notifications) {
             LoadNewScreen(Apps::Clock, DisplayApp::FullRefreshDirections::Up);
           } else if (currentApp == Apps::QuickSettings) {
-            LoadNewScreen(Apps::Clock, DisplayApp::FullRefreshDirections::LeftAnim);
+            // Slides back the way it came in, which is from the right now.
+            LoadNewScreen(Apps::Clock, DisplayApp::FullRefreshDirections::RightAnim);
           } else {
             LoadNewScreen(Apps::Clock, DisplayApp::FullRefreshDirections::Down);
           }

@@ -13,6 +13,7 @@ The work lives on the `infinisleep-health` branch. A [Logging app](#logging-what
 - [Companion app](#companion-app)
 - [Pomodoro app](#pomodoro-app)
 - [Timer and stopwatch](#timer-and-stopwatch)
+- [Flashlight](#flashlight)
 - [Logging what happens through the day](#logging-what-happens-through-the-day)
 - [Apps left out](#apps-left-out)
 - [Building](#building)
@@ -164,6 +165,14 @@ tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it 
 tests/battery/run.sh           # the battery curve, against a reference discharge, and its calibration
 ```
 
+## Flashlight
+
+Swiping right on the watch face opens the flashlight, and quick settings moved to swiping left, since the light is the one thing wanted in the dark without looking and that swipe is the one that needs no aim.
+
+The app opens on six choices rather than on a torch to switch on and then adjust: three strengths in white on the top row and the same three in red below, weakest on the left. Tapping one lights the whole screen in it at once, so the light that comes on is the one wanted, and red at the lowest strength, for the middle of the night, is never reached through a flash of white. Red because it is the colour that leaves night vision, and whoever is asleep beside the wearer, alone. The choices themselves are shown at the lowest strength for the same reason. Tapping the lit screen puts the choices back, swiping left or right while lit steps the strength, and the button leaves.
+
+Written with Claude Code.
+
 ## Everything this fork changes
 
 Described above, gathered in one place. The history is squashed into one commit per subject, so a bug fix sits inside whatever introduced it.
@@ -217,6 +226,7 @@ Other apps:
 - A Pomodoro app: a queue of timers that chain into each other.
 - The Timer rings until told to stop instead of buzzing once, and opens on the length last used.
 - The Stopwatch keeps a run going after the app is left.
+- The flashlight on a swipe right from the watch face, opening on three strengths in white and three in red; quick settings moved to the swipe left.
 - The sleep app sits before steps in the app list, and four games and the Metronome are dropped for flash.
 
 Tests:
