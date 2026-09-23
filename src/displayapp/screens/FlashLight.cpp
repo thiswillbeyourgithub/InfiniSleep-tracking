@@ -1,15 +1,35 @@
 #include "displayapp/screens/FlashLight.h"
 #include "displayapp/DisplayApp.h"
-#include "displayapp/screens/Symbols.h"
-#include "displayapp/InfiniTimeTheme.h"
 
 using namespace Pinetime::Applications::Screens;
 
 namespace {
-  void EventHandler(lv_obj_t* obj, lv_event_t event) {
+  using Levels = Pinetime::Controllers::BrightnessController::Levels;
+
+  // Rows of the grid. Red rather than any warmer white because it is the colour that leaves night
+  // vision, and whoever is asleep beside the wearer, alone.
+  constexpr lv_color_t tintColours[] = {LV_COLOR_WHITE, LV_COLOR_RED};
+  // Written on each choice in the colour that reads on it: black on white, white on red.
+  constexpr lv_color_t tintTextColours[] = {LV_COLOR_BLACK, LV_COLOR_WHITE};
+
+  // Columns of the grid, weakest first so the red one at the left is the night light.
+  constexpr Levels levels[] = {Levels::Low, Levels::Medium, Levels::High};
+  constexpr const char* levelLabels[] = {"Low", "Mid", "High"};
+
+  // Two rows of three on the 240 pixel screen, with an even gap all round.
+  constexpr lv_coord_t gap = 6;
+  constexpr lv_coord_t choiceWidth = (240 - 4 * gap) / 3;
+  constexpr lv_coord_t choiceHeight = (240 - 3 * gap) / 2;
+
+  void ChoiceHandler(lv_obj_t* obj, lv_event_t event) {
     if (event == LV_EVENT_CLICKED) {
-      auto* screen = static_cast<FlashLight*>(obj->user_data);
-      screen->Toggle();
+      static_cast<FlashLight*>(obj->user_data)->OnChoice(obj);
+    }
+  }
+
+  void BackgroundHandler(lv_obj_t* obj, lv_event_t event) {
+    if (event == LV_EVENT_CLICKED) {
+      static_cast<FlashLight*>(obj->user_data)->TurnOff();
     }
   }
 }
@@ -18,25 +38,30 @@ FlashLight::FlashLight(System::SystemTask& systemTask, Controllers::BrightnessCo
   : wakeLock(systemTask), brightnessController {brightnessController} {
 
   previousBrightnessLevel = brightnessController.Level();
-  brightnessController.Set(Controllers::BrightnessController::Levels::Low);
+  // The choices are read at the lowest strength, so opening the app at night is not itself a
+  // flash of light.
+  brightnessController.Set(Levels::Low);
+  lv_obj_set_style_local_bg_color(lv_scr_act(), LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, LV_COLOR_BLACK);
 
-  flashLight = lv_label_create(lv_scr_act(), nullptr);
-  lv_obj_set_style_local_text_font(flashLight, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &lv_font_sys_48);
-  lv_label_set_text_static(flashLight, Symbols::flashlight);
-  lv_obj_align(flashLight, nullptr, LV_ALIGN_CENTER, 0, 0);
+  for (uint8_t t = 0; t < nTints; t++) {
+    for (uint8_t l = 0; l < nLevels; l++) {
+      lv_obj_t* choice = lv_btn_create(lv_scr_act(), nullptr);
+      lv_obj_set_size(choice, choiceWidth, choiceHeight);
+      lv_obj_set_pos(choice, gap + l * (choiceWidth + gap), gap + t * (choiceHeight + gap));
+      lv_obj_set_style_local_bg_color(choice, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, tintColours[t]);
+      lv_obj_set_style_local_text_color(choice, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, tintTextColours[t]);
+      // The strength is also said by how opaque the choice is, so the grid reads at a glance
+      // without the words.
+      lv_obj_set_style_local_bg_opa(choice, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, static_cast<lv_opa_t>(LV_OPA_40 + l * LV_OPA_30));
+      choice->user_data = this;
+      lv_obj_set_event_cb(choice, ChoiceHandler);
 
-  for (auto& indicator : indicators) {
-    indicator = lv_obj_create(lv_scr_act(), nullptr);
-    lv_obj_set_size(indicator, 15, 10);
-    lv_obj_set_style_local_border_width(indicator, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, 2);
+      lv_obj_t* label = lv_label_create(choice, nullptr);
+      lv_label_set_text_static(label, levelLabels[l]);
+
+      choices[t][l] = choice;
+    }
   }
-
-  lv_obj_align(indicators[1], flashLight, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
-  lv_obj_align(indicators[0], indicators[1], LV_ALIGN_OUT_LEFT_MID, -8, 0);
-  lv_obj_align(indicators[2], indicators[1], LV_ALIGN_OUT_RIGHT_MID, 8, 0);
-
-  SetIndicators();
-  SetColors();
 
   backgroundAction = lv_label_create(lv_scr_act(), nullptr);
   lv_label_set_long_mode(backgroundAction, LV_LABEL_LONG_CROP);
@@ -45,7 +70,8 @@ FlashLight::FlashLight(System::SystemTask& systemTask, Controllers::BrightnessCo
   lv_label_set_text_static(backgroundAction, "");
   lv_obj_set_click(backgroundAction, true);
   backgroundAction->user_data = this;
-  lv_obj_set_event_cb(backgroundAction, EventHandler);
+  lv_obj_set_event_cb(backgroundAction, BackgroundHandler);
+  lv_obj_set_hidden(backgroundAction, true);
 
   wakeLock.Lock();
 }
@@ -56,74 +82,63 @@ FlashLight::~FlashLight() {
   brightnessController.Set(previousBrightnessLevel);
 }
 
-void FlashLight::SetColors() {
-  lv_color_t bgColor = isOn ? LV_COLOR_WHITE : LV_COLOR_BLACK;
-  lv_color_t fgColor = isOn ? Colors::lightGray : LV_COLOR_WHITE;
-
-  lv_obj_set_style_local_bg_color(lv_scr_act(), LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, bgColor);
-  lv_obj_set_style_local_text_color(flashLight, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, fgColor);
-  for (auto& indicator : indicators) {
-    lv_obj_set_style_local_bg_color(indicator, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, fgColor);
-    lv_obj_set_style_local_bg_color(indicator, LV_OBJ_PART_MAIN, LV_STATE_DISABLED, bgColor);
-    lv_obj_set_style_local_border_color(indicator, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, fgColor);
+void FlashLight::OnChoice(lv_obj_t* choice) {
+  for (uint8_t t = 0; t < nTints; t++) {
+    for (uint8_t l = 0; l < nLevels; l++) {
+      if (choices[t][l] == choice) {
+        tint = t;
+        level = l;
+        TurnOn();
+        return;
+      }
+    }
   }
 }
 
-void FlashLight::SetIndicators() {
-  using namespace Pinetime::Controllers;
-
-  if (brightnessLevel == BrightnessController::Levels::High) {
-    lv_obj_set_state(indicators[1], LV_STATE_DEFAULT);
-    lv_obj_set_state(indicators[2], LV_STATE_DEFAULT);
-  } else if (brightnessLevel == BrightnessController::Levels::Medium) {
-    lv_obj_set_state(indicators[1], LV_STATE_DEFAULT);
-    lv_obj_set_state(indicators[2], LV_STATE_DISABLED);
-  } else {
-    lv_obj_set_state(indicators[1], LV_STATE_DISABLED);
-    lv_obj_set_state(indicators[2], LV_STATE_DISABLED);
+void FlashLight::TurnOn() {
+  isOn = true;
+  for (auto& row : choices) {
+    for (auto* choice : row) {
+      lv_obj_set_hidden(choice, true);
+    }
   }
+  lv_obj_set_hidden(backgroundAction, false);
+  lv_obj_set_style_local_bg_color(lv_scr_act(), LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, tintColours[tint]);
+  brightnessController.Set(levels[level]);
 }
 
-void FlashLight::Toggle() {
-  isOn = !isOn;
-  SetColors();
-  if (isOn) {
-    brightnessController.Set(brightnessLevel);
-  } else {
-    brightnessController.Set(Controllers::BrightnessController::Levels::Low);
+void FlashLight::TurnOff() {
+  isOn = false;
+  // Back to the grid rather than to the watch face, so a wrong pick is one tap from the right one.
+  brightnessController.Set(Levels::Low);
+  lv_obj_set_style_local_bg_color(lv_scr_act(), LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, LV_COLOR_BLACK);
+  lv_obj_set_hidden(backgroundAction, true);
+  for (auto& row : choices) {
+    for (auto* choice : row) {
+      lv_obj_set_hidden(choice, false);
+    }
   }
 }
 
 bool FlashLight::OnTouchEvent(Pinetime::Applications::TouchEvents event) {
-  using namespace Pinetime::Controllers;
-
-  auto SetState = [this]() {
-    if (isOn) {
-      brightnessController.Set(brightnessLevel);
-    }
-    SetIndicators();
-  };
-
+  // Only while lit: a swipe on the grid is left to DisplayApp, which is how a swipe left takes the
+  // wearer back to the watch face they swiped right from.
+  if (!isOn) {
+    return false;
+  }
   if (event == TouchEvents::SwipeLeft) {
-    if (brightnessLevel == BrightnessController::Levels::High) {
-      brightnessLevel = BrightnessController::Levels::Medium;
-      SetState();
-    } else if (brightnessLevel == BrightnessController::Levels::Medium) {
-      brightnessLevel = BrightnessController::Levels::Low;
-      SetState();
+    if (level > 0) {
+      level--;
+      brightnessController.Set(levels[level]);
     }
     return true;
   }
   if (event == TouchEvents::SwipeRight) {
-    if (brightnessLevel == BrightnessController::Levels::Low) {
-      brightnessLevel = BrightnessController::Levels::Medium;
-      SetState();
-    } else if (brightnessLevel == BrightnessController::Levels::Medium) {
-      brightnessLevel = BrightnessController::Levels::High;
-      SetState();
+    if (level < nLevels - 1) {
+      level++;
+      brightnessController.Set(levels[level]);
     }
     return true;
   }
-
   return false;
 }
