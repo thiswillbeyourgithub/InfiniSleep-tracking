@@ -299,6 +299,17 @@ int main() {
     CHECK(fs.reads + fs.writes == afterReload);
   }
 
+  {
+    printf("text on a coloured row is whichever of black and white reads\n");
+    CHECK(WantsDarkText(0xFFFFFF));
+    CHECK(!WantsDarkText(0x000000));
+    CHECK(WantsDarkText(0xFFEE58));  // yellow, from the phone's suggestions
+    CHECK(!WantsDarkText(0xAB47BC)); // purple, likewise
+    // Pure blue is dark to the eye although one of its channels is full.
+    CHECK(!WantsDarkText(0x0000FF));
+    CHECK(WantsDarkText(0x00FF00));
+  }
+
   if (failures == 0) {
     printf("\nall checks passed\n");
     return 0;

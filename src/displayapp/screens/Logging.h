@@ -125,7 +125,7 @@ namespace Pinetime {
         uint8_t PageCount() const;
         static const char* IconFor(const Controllers::LogSlot& slot, bool running);
 
-        /* What to paint a slot's icon in: the colour the wearer gave it on the phone, or the app's
+        /* What to paint a slot in: the colour the wearer gave it on the phone, or the app's
          * own when they gave it none. */
         static lv_color_t ColourFor(const Controllers::LogSlot& slot);
 

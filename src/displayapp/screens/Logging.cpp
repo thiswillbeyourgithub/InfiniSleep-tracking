@@ -184,26 +184,45 @@ void Logging::BuildMenu() {
     lv_obj_set_event_cb(button, EventHandler);
     lv_btn_set_layout(button, LV_LAYOUT_OFF);
     lv_obj_set_style_local_radius(button, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, 3);
-    lv_obj_set_style_local_bg_color(button, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, Colors::bgAlt);
+    /* A slot the wearer coloured is drawn in its colour whole, the row rather than only its icon, so
+     * the menu is sorted by eye before a label is read. The writing on it goes black or white,
+     * whichever reads, as the phone does on its cards. */
+    const bool coloured = slot->colour != LogSlot::noColour;
+    lv_color_t ink {};
+    if (coloured) {
+      lv_obj_set_style_local_bg_color(button, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, ColourFor(*slot));
+      ink = Controllers::WantsDarkText(slot->colour) ? LV_COLOR_BLACK : LV_COLOR_WHITE;
+    } else {
+      lv_obj_set_style_local_bg_color(button, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, Colors::bgAlt);
+    }
+    if (running) {
+      /* Running has to shout: which slot is open right now is the one thing on this screen that
+       * changes without the wearer doing anything. A border rather than a colour of its own,
+       * because the row's colour is what the slot is, not what it is doing. */
+      lv_obj_set_style_local_border_width(button, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, 3);
+      lv_obj_set_style_local_border_color(button, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, Colors::highlight);
+    }
     lv_obj_set_size(button, LV_HOR_RES - 8, itemHeight);
     lv_obj_set_pos(button, 4, titleHeight + i * (itemHeight + itemGap));
     itemButtons[i] = button;
 
     lv_obj_t* icon = lv_label_create(button, nullptr);
     lv_label_set_text_static(icon, IconFor(*slot, running));
-    /* Running wins over the slot's own colour: which of them is open right now is the one thing on
-     * this screen that changes without the wearer doing anything, so it has to shout. The colour is
-     * what the slot is rather than what it is doing, and the icon has already changed to a stop. */
+    /* An uncoloured row keeps the app's own look, where the icon turning green is what says running.
+     * On a coloured row the icon is written like the label, and the border says it instead. */
     lv_obj_set_style_local_text_color(icon,
                                       LV_LABEL_PART_MAIN,
                                       LV_STATE_DEFAULT,
-                                      running ? Colors::highlight : ColourFor(*slot));
+                                      coloured ? ink : (running ? Colors::highlight : ColourFor(*slot)));
     lv_obj_align(icon, nullptr, LV_ALIGN_IN_LEFT_MID, 4, 0);
 
     lv_obj_t* label = lv_label_create(button, nullptr);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CROP);
     lv_obj_set_width(label, LV_HOR_RES - 50);
     lv_label_set_text(label, slot->label);
+    if (coloured) {
+      lv_obj_set_style_local_text_color(label, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, ink);
+    }
     lv_obj_align(label, icon, LV_ALIGN_OUT_RIGHT_MID, 8, 0);
   }
 }

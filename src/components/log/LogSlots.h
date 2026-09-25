@@ -76,6 +76,18 @@ namespace Pinetime {
       bytes[2] = static_cast<uint8_t>(colour & 0xFF);
     }
 
+    /// Whether writing on top of this colour has to be black rather than white to be read.
+    ///
+    /// The usual weighting of the three channels by how bright the eye finds them, cut at the middle.
+    /// The phone makes the same call with the same numbers (LogSlots.wantsDarkText), so that a row
+    /// reads the same way on both ends.
+    inline bool WantsDarkText(uint32_t colour) {
+      const uint32_t red = (colour >> 16) & 0xFF;
+      const uint32_t green = (colour >> 8) & 0xFF;
+      const uint32_t blue = colour & 0xFF;
+      return red * 299 + green * 587 + blue * 114 >= 128 * 1000;
+    }
+
     /// The table of slots the watch is showing, as the phone last pushed it.
     ///
     /// Held in RAM because the logging app reads it on every screen it builds, and mirrored to a
