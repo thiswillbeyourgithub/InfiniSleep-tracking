@@ -495,13 +495,15 @@ void DisplayApp::Refresh() {
               case TouchEvents::SwipeDown:
                 LoadNewScreen(Apps::Notifications, DisplayApp::FullRefreshDirections::Down);
                 break;
-              // The light is the one thing wanted in the dark without looking, so it has the swipe
-              // that needs no aim. Quick settings, which holds it too, moved to the other side.
-              case TouchEvents::SwipeRight:
-                LoadNewScreen(Apps::FlashLight, DisplayApp::FullRefreshDirections::RightAnim);
-                break;
+              // The light is the one thing wanted in the dark without looking, so it has a swipe
+              // straight off the watch face. Quick settings, which holds it too, has the other one.
+              // Quick settings keeps the side upstream gave it; the light first went there and
+              // was moved off after a night of use, the other side turning out the easier one.
               case TouchEvents::SwipeLeft:
-                LoadNewScreen(Apps::QuickSettings, DisplayApp::FullRefreshDirections::LeftAnim);
+                LoadNewScreen(Apps::FlashLight, DisplayApp::FullRefreshDirections::LeftAnim);
+                break;
+              case TouchEvents::SwipeRight:
+                LoadNewScreen(Apps::QuickSettings, DisplayApp::FullRefreshDirections::RightAnim);
                 break;
               case TouchEvents::DoubleTap:
                 PushMessageToSystemTask(System::Messages::GoToSleep);
@@ -530,8 +532,8 @@ void DisplayApp::Refresh() {
           if (currentApp == Apps::Notifications) {
             LoadWatchFace(DisplayApp::FullRefreshDirections::Up);
           } else if (currentApp == Apps::QuickSettings) {
-            // Slides back the way it came in, which is from the right now.
-            LoadWatchFace(DisplayApp::FullRefreshDirections::RightAnim);
+            // Slides back the way it came in.
+            LoadWatchFace(DisplayApp::FullRefreshDirections::LeftAnim);
           } else {
             LoadWatchFace(DisplayApp::FullRefreshDirections::Down);
           }
