@@ -528,15 +528,13 @@ void DisplayApp::Refresh() {
       case Messages::ButtonLongPressed:
         if (currentApp != Apps::Clock) {
           if (currentApp == Apps::Notifications) {
-            LoadNewScreen(Apps::Clock, DisplayApp::FullRefreshDirections::Up);
+            LoadWatchFace(DisplayApp::FullRefreshDirections::Up);
           } else if (currentApp == Apps::QuickSettings) {
             // Slides back the way it came in, which is from the right now.
-            LoadNewScreen(Apps::Clock, DisplayApp::FullRefreshDirections::RightAnim);
+            LoadWatchFace(DisplayApp::FullRefreshDirections::RightAnim);
           } else {
-            LoadNewScreen(Apps::Clock, DisplayApp::FullRefreshDirections::Down);
+            LoadWatchFace(DisplayApp::FullRefreshDirections::Down);
           }
-          appStackDirections.Reset();
-          returnAppStack.Reset();
         }
         break;
       case Messages::ButtonLongerPressed:
@@ -567,9 +565,22 @@ void DisplayApp::Refresh() {
   }
 
   if (nextApp != Apps::None) {
-    LoadNewScreen(nextApp, nextDirection);
+    // The watch face is the bottom of the stack rather than a screen pushed onto it, so an app
+    // asking for it is sent home the way a long press does, with nothing left to swipe back to.
+    // Pushed like any other app instead, every trip home would grow the stack by one.
+    if (nextApp == Apps::Clock) {
+      LoadWatchFace(nextDirection);
+    } else {
+      LoadNewScreen(nextApp, nextDirection);
+    }
     nextApp = Apps::None;
   }
+}
+
+void DisplayApp::LoadWatchFace(DisplayApp::FullRefreshDirections direction) {
+  LoadNewScreen(Apps::Clock, direction);
+  appStackDirections.Reset();
+  returnAppStack.Reset();
 }
 
 void DisplayApp::StartApp(Apps app, DisplayApp::FullRefreshDirections direction) {

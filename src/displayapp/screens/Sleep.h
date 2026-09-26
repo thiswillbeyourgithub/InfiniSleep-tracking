@@ -108,6 +108,8 @@ namespace Pinetime {
         bool StopAlarmPush();
         // Counts the pushes needed to stop the alarm or the tracker, returns true once there are enough of them
         bool StopPushConfirmed();
+        /// Ends the night in progress and goes back to the watch face.
+        void StopTrackerAndLeave();
 
         bool alreadyAlerting = false;
         // The page currently on screen, so that the alarm page isn't redrawn under the fingers

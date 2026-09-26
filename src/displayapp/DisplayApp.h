@@ -143,6 +143,8 @@ namespace Pinetime {
       void Refresh();
       void LoadNewScreen(Apps app, DisplayApp::FullRefreshDirections direction);
       void LoadScreen(Apps app, DisplayApp::FullRefreshDirections direction);
+      /// Back to the watch face with the app stack emptied, as a long press on the button does.
+      void LoadWatchFace(DisplayApp::FullRefreshDirections direction);
       void PushMessageToSystemTask(Pinetime::System::Messages message);
 
       Apps nextApp = Apps::None;

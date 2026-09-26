@@ -728,7 +728,10 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
     if (obj == trackerToggleBtn) {
       // Stopping the tracker asks for the same pushes as stopping the ringing alarm, so that it
       // can't be turned off by a half asleep touch during the night
-      if (infiniSleepController.IsTrackerEnabled() && !StopPushConfirmed()) {
+      if (infiniSleepController.IsTrackerEnabled()) {
+        if (StopPushConfirmed()) {
+          StopTrackerAndLeave();
+        }
         return;
       }
       infiniSleepController.ToggleTracker();
@@ -869,6 +872,16 @@ bool Sleep::StopPushConfirmed() {
   return true;
 }
 
+// The last of the taps that stop the tracker lands where the start button reappears, and the
+// taps before it came in a hurry, so staying on the page would let one more tap start a new night
+// straight away. Leaving for the watch face puts nothing under the finger. The deferred StartApp
+// is what makes this safe from inside the button's own handler: the screen is destroyed only once
+// the handler has returned.
+void Sleep::StopTrackerAndLeave() {
+  infiniSleepController.ToggleTracker();
+  displayApp.StartApp(Apps::Clock, DisplayApp::FullRefreshDirections::Down);
+}
+
 bool Sleep::StopAlarmPush() {
   if (!StopPushConfirmed()) {
     return true;
@@ -880,10 +893,7 @@ bool Sleep::StopAlarmPush() {
   infiniSleepController.isSnoozing = false;
   StopAlerting();
   if (infiniSleepController.IsTrackerEnabled()) {
-    displayState = SleepDisplayState::Info;
-    UpdateDisplay();
-    infiniSleepController.ToggleTracker();
-    UpdateDisplay();
+    StopTrackerAndLeave();
     return true;
   }
   displayState = SleepDisplayState::Info;
