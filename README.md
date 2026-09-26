@@ -184,7 +184,7 @@ Sleep tracking:
 - Sessions under five minutes discarded, and one awake record at each end of the ones that are kept.
 - The sleep pages reworked, a Sensors page added, and the sensor settings put on top of them.
 - The Auto button sets the wake up time and nothing else, and the wake alarm stands down when the tracker is stopped.
-- An Info page record count and a log page showing what is waiting to be collected.
+- An Info page record count, shown only once more than a quarter of the log is waiting, and a log page showing what is waiting to be collected.
 - Stopping the tracker, from its button or from the ringing alarm, goes back to the watch face, so a tap too many cannot start another night.
 
 The activity log:

@@ -346,16 +346,22 @@ void Sleep::DrawInfoScreen() {
   // anything was actually recorded. A night that ends with this at zero was never measured, so
   // there is nothing for a companion app to have missed; one that ends with it at the capacity
   // has been overwriting its own oldest records and needs collecting more often.
+  //
+  // Records leave the log once the phone says it stored them, so what is counted is what has not
+  // been synced yet. Shown only past a quarter of the capacity: a phone collecting every half hour
+  // keeps it at a handful, which is nothing to act on, and a line that is usually absent is
+  // noticed when it does appear. The log page still shows the count at any level.
+  const uint16_t unsynced = activityLogController.RecordCount();
+  const uint16_t capacity = activityLogController.Capacity();
   label_record_count = lv_label_create(lv_scr_act(), nullptr);
-  lv_label_set_text_fmt(label_record_count,
-                        "Points: %d/%d",
-                        activityLogController.RecordCount(),
-                        activityLogController.Capacity());
+  lv_label_set_text_fmt(label_record_count, "Points: %d/%d", unsynced, capacity);
   lv_obj_align(label_record_count, lv_scr_act(), LV_ALIGN_IN_TOP_MID, 0, 30);
   lv_obj_set_style_local_text_color(label_record_count,
                                     LV_LABEL_PART_MAIN,
                                     LV_STATE_DEFAULT,
                                     infiniSleepController.IsEnabled() ? LV_COLOR_RED : LV_COLOR_WHITE);
+  // Multiplied rather than divided so a log of 682 records is not rounded down to 170.
+  lv_obj_set_hidden(label_record_count, unsynced * 4 <= capacity);
 
   // Total sleep time
   label_total_sleep = lv_label_create(lv_scr_act(), nullptr);
