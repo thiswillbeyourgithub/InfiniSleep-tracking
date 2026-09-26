@@ -54,6 +54,26 @@ namespace Pinetime {
         return heartRate > 0 && uncertainty > 0 && uncertainty <= convergedUncertainty;
       }
 
+      /// The most recent non zero reading published as Running since ClearLatestReading(), or 0 when
+      /// there has been none.
+      ///
+      /// HeartRate() alone is a snapshot, and a poor one to sample at a fixed instant: after a good
+      /// window, one bad window makes the task publish Running with 0 until the next good one lands
+      /// a few seconds later. An activity epoch read at the end of its settle window used to lose its
+      /// whole reading whenever that instant fell inside such a gap, although the sensor had given a
+      /// perfectly good value seconds before. Kept here rather than in the epoch code because only
+      /// the controller sees every update the task publishes.
+      uint8_t LatestReading() const {
+        return latestReading;
+      }
+
+      /// Forgets the latest reading, so LatestReading() describes only what comes after this call.
+      /// Called at the start of every activity epoch, so a reading from an earlier measurement is
+      /// never taken for this one's.
+      void ClearLatestReading() {
+        latestReading = 0;
+      }
+
       void SetService(Pinetime::Controllers::HeartRateService* service);
 
       /// Whether a new reading is published on the BLE heart rate characteristic.
@@ -76,6 +96,7 @@ namespace Pinetime {
       States state = States::Stopped;
       uint8_t heartRate = 0;
       uint8_t uncertainty = 0;
+      uint8_t latestReading = 0;
       bool bleNotificationsEnabled = true;
       Pinetime::Controllers::HeartRateService* service = nullptr;
     };

@@ -17,6 +17,9 @@ void HeartRateController::Update(HeartRateController::States newState, uint8_t h
 
   this->state = newState;
   this->uncertainty = uncertainty;
+  if (newState == States::Running && heartRate > 0) {
+    latestReading = heartRate;
+  }
   if (this->heartRate != heartRate) {
     this->heartRate = heartRate;
     if (bleNotificationsEnabled) {

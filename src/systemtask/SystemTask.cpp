@@ -668,6 +668,7 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
 
   activityEpochKind = kind;
   activityEpochWantsHeartRate = wantsHeartRate;
+  heartRateController.ClearLatestReading();
 
   // While the watch is awake the heart rate task belongs to whatever the user is doing with
   // it, so it is read but never driven. While the watch is asleep the task has been stopped
@@ -866,11 +867,17 @@ void SystemTask::RecordActivityEpoch() {
   }
 
   if (activityEpochWantsHeartRate) {
-    // The state matters as much as the value. HeartRateController holds its last reading
-    // indefinitely, so without this an epoch where the sensor never converged would be
-    // recorded with a heart rate from hours earlier, indistinguishable from a real one.
-    const uint8_t heartRate = heartRateController.HeartRate();
-    if (heartRateController.State() == Controllers::HeartRateController::States::Running && heartRate > 0) {
+    // The latest good reading since the epoch began rather than the value at this instant, which
+    // is 0 whenever the last window happened to be a bad one, even seconds after a good one.
+    // Cleared when the epoch began, so it cannot be a reading from hours earlier either.
+    uint8_t heartRate = heartRateController.LatestReading();
+    // An epoch recorded straight away, with the screen on, has had no time to see an update. What
+    // the heart rate app is measuring then is the reading, provided it is one: the controller
+    // holds its last value indefinitely, so the state matters as much as the value.
+    if (heartRate == 0 && heartRateController.State() == Controllers::HeartRateController::States::Running) {
+      heartRate = heartRateController.HeartRate();
+    }
+    if (heartRate > 0) {
       record.heartRate = heartRate;
     }
   }

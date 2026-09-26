@@ -45,7 +45,7 @@ It builds on two upstream efforts, neither of which is merged:
 
 ## What this fork adds
 
-- A heart rate reading taken at each tracker epoch, rather than a setting that promised one and did nothing.
+- A heart rate reading taken at each tracker epoch, rather than a setting that promised one and did nothing. The epoch keeps the last good reading of its 30 second window rather than the value at its end, which is 0 whenever the last window happened to be a bad one.
 - An actigraphy count accumulated from the accelerometer.
 - A ring of records (timestamp, motion, heart rate, kind), mirrored to `/.system/activity.dat` so it survives a reboot. Stored packed, at 3 bytes a record on a watch that measures no motion and 5 where it does, which is 682 records or 409: about 7 nights at a 5 minute epoch, or 21 at 15 minutes. The log starts narrow and widens for good on the first record that carries motion, so a watch whose accelerometer never answers does not spend a third of its log saying so. Nothing is quantised, and the format on the wire is the same either way.
 - A BLE service, `00060000-78fc-48fe-8e23-433b3a1942d0`, that hands the records over in batches and only reclaims the space once the host says it stored them.
@@ -160,6 +160,7 @@ tests/activity/run.sh          # activity log tests, on the host: no hardware, n
 tests/eventlog/run.sh          # the event log: numbering, the release by sequence, reboots
 tests/logslots/run.sh          # the slot table: what a phone may push and what is refused
 tests/heartrate/run.sh         # heart rate latency and accuracy, likewise, on a synthetic pulse
+tests/heartratecontroller/run.sh  # the reading an activity epoch keeps when the last window was a bad one
 tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an hour in microseconds
 tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it takes to wrap round
 tests/battery/run.sh           # the battery curve, against a reference discharge, and its calibration
