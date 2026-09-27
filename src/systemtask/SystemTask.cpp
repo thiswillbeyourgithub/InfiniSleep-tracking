@@ -441,11 +441,13 @@ void SystemTask::Work() {
           // Reapplied every epoch rather than once when tracking starts, because the battery
           // crosses the threshold during the night, not before it.
           infiniSleepController.SetTrackerPeriodMinutes(EffectiveTrackerIntervalMinutes());
-          BeginActivityEpoch(Controllers::ActivityKind::Asleep, infiniSleepController.GetInfiniSleepSettings().heartRateTracking);
+          BeginActivityEpoch(Controllers::ActivityKind::Asleep,
+                             infiniSleepController.GetInfiniSleepSettings().heartRateTracking,
+                             EffectiveTrackerIntervalMinutes());
           displayApp.PushMessage(Pinetime::Applications::Display::Messages::SleepTrackerUpdate);
           break;
         case Messages::SleepTrackerHeartRateReady:
-          RecordActivityEpoch();
+          OnHeartRateSettleTimer();
           break;
         case Messages::HeartRatePollTimerExpired:
           PollHeartRate();
@@ -658,7 +660,7 @@ TickType_t SystemTask::MotionPollPeriod() const {
   return pdMS_TO_TICKS(EffectiveMotionSampleIntervalDs() * 100);
 }
 
-void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate) {
+void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate, uint8_t periodMinutes) {
   if (activityEpochMeasuring) {
     // The previous epoch is still waiting on the sensor. Skipping is better than stacking:
     // it can only happen if the settle window is longer than the epoch, and the reading in
@@ -668,7 +670,11 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
 
   activityEpochKind = kind;
   activityEpochWantsHeartRate = wantsHeartRate;
-  heartRateController.ClearLatestReading();
+  activityEpochBegan = xTaskGetTickCount();
+  activityEpochPeriod = pdMS_TO_TICKS(60 * 1000) * periodMinutes;
+  activityEpochRetries = 0;
+  activityEpochWaitingToRetry = false;
+  heartRateController.ClearLatestSettledReading();
 
   // While the watch is awake the heart rate task belongs to whatever the user is doing with
   // it, so it is read but never driven. While the watch is asleep the task has been stopped
@@ -683,6 +689,11 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
     return;
   }
 
+  activityEpochMeasuring = true;
+  StartEpochMeasurement();
+}
+
+void SystemTask::StartEpochMeasurement() {
   // A measurement the wearer started in the heart rate app and never stopped is still theirs. The
   // task keeps it across GoToSleep and resumes it on the next WakeUp, so the sensor is woken here
   // without restarting the measurement, and the epoch below leaves it standing instead of ending
@@ -696,7 +707,6 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
   // else is measuring" forever, and every epoch after it skips the measurement it exists to take.
   activityEpochStartedMeasurement = !heartRateApp.IsMeasuring();
 
-  activityEpochMeasuring = true;
   activityEpochOwnsHeartRate = true;
   heartRateApp.PushMessage(Pinetime::Applications::HeartRateTask::Messages::WakeUp);
   if (activityEpochStartedMeasurement) {
@@ -704,7 +714,60 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
     // than keeping whatever the last one left there. The task ignores a second start anyway.
     heartRateController.Start();
   }
-  xTimerStart(heartRateSettleTimer, 0);
+  // Changed rather than just started, since the same timer also times the wait between two
+  // attempts, which is longer. Changing the period of a dormant timer starts it.
+  xTimerChangePeriod(heartRateSettleTimer, heartRateSettlePeriod, 0);
+}
+
+void SystemTask::OnHeartRateSettleTimer() {
+  if (activityEpochWaitingToRetry) {
+    activityEpochWaitingToRetry = false;
+    // A session that ended during the wait has already written its closing boundary, and an
+    // Asleep epoch recorded after it would reopen the night the wearer just closed. The epoch is
+    // dropped instead; it only lacked a heart rate, and the boundary covers its time.
+    if (activityEpochKind == Controllers::ActivityKind::Asleep && !infiniSleepController.IsTrackerEnabled()) {
+      activityEpochMeasuring = false;
+      return;
+    }
+    // Picked up in the meantime, the sensor is the wearer's again and is not driven from here.
+    // The epoch is recorded with whatever the heart rate app has.
+    if (!IsScreenAsleep()) {
+      RecordActivityEpoch();
+      return;
+    }
+    StartEpochMeasurement();
+    return;
+  }
+
+  if (ShouldRetryEpochHeartRate()) {
+    // The sensor goes off for the wait: a wrist that gave nothing for 30 seconds is usually moving
+    // or loose, and a minute later it has often settled, whereas keeping the sensor on through the
+    // wait costs twice the power for a reading no more likely to come.
+    ReleaseEpochSensor();
+    activityEpochRetries++;
+    activityEpochWaitingToRetry = true;
+    xTimerChangePeriod(heartRateSettleTimer, heartRateRetryWait, 0);
+    return;
+  }
+
+  RecordActivityEpoch();
+}
+
+bool SystemTask::ShouldRetryEpochHeartRate() const {
+  if (!activityEpochWantsHeartRate || !activityEpochOwnsHeartRate || !IsScreenAsleep()) {
+    return false;
+  }
+  if (heartRateController.LatestSettledReading() > 0) {
+    return false;
+  }
+  if (activityEpochRetries >= maxHeartRateRetries) {
+    return false;
+  }
+  // Another wait and another measurement must fit before the next epoch is due, since that epoch
+  // is skipped while this one is still in flight. At a one minute tracker epoch nothing fits and
+  // the epoch is recorded as it always was; at five minutes two attempts do.
+  const TickType_t elapsed = xTaskGetTickCount() - activityEpochBegan;
+  return elapsed + heartRateRetryWait + heartRateSettlePeriod < activityEpochPeriod;
 }
 
 void SystemTask::ApplyHeartRatePollInterval() {
@@ -749,7 +812,7 @@ void SystemTask::PollHeartRate() {
     return;
   }
 
-  BeginActivityEpoch(Controllers::ActivityKind::Unknown, true);
+  BeginActivityEpoch(Controllers::ActivityKind::Unknown, true, heartRatePollPeriodMinutes);
 }
 
 uint32_t SystemTask::UtcNowSeconds() {
@@ -826,10 +889,12 @@ void SystemTask::RecordManualHeartRate() {
   if (heartRateController.State() != Controllers::HeartRateController::States::Running) {
     return;
   }
-  const uint8_t heartRate = heartRateController.HeartRate();
-  if (heartRate == 0) {
+  // Settled only, as the app itself asks before pushing, checked again for the same reason as the
+  // state: a coarse estimate stored as a number would pass for a measurement it is not.
+  if (!heartRateController.IsConverged()) {
     return;
   }
+  const uint8_t heartRate = heartRateController.HeartRate();
 
   Pinetime::Controllers::ActivityRecord record;
   record.timestamp = UtcNowSeconds();
@@ -870,11 +935,12 @@ void SystemTask::RecordActivityEpoch() {
     // The latest good reading since the epoch began rather than the value at this instant, which
     // is 0 whenever the last window happened to be a bad one, even seconds after a good one.
     // Cleared when the epoch began, so it cannot be a reading from hours earlier either.
-    uint8_t heartRate = heartRateController.LatestReading();
+    uint8_t heartRate = heartRateController.LatestSettledReading();
     // An epoch recorded straight away, with the screen on, has had no time to see an update. What
-    // the heart rate app is measuring then is the reading, provided it is one: the controller
-    // holds its last value indefinitely, so the state matters as much as the value.
-    if (heartRate == 0 && heartRateController.State() == Controllers::HeartRateController::States::Running) {
+    // the heart rate app is measuring then is the reading, provided it is a settled one: the
+    // controller holds its last value indefinitely, so the state matters as much as the value.
+    if (heartRate == 0 && heartRateController.State() == Controllers::HeartRateController::States::Running &&
+        heartRateController.IsConverged()) {
       heartRate = heartRateController.HeartRate();
     }
     if (heartRate > 0) {
@@ -898,6 +964,11 @@ void SystemTask::RecordActivityEpoch() {
     activityLogController.Add(record);
   }
 
+  ReleaseEpochSensor();
+  activityEpochMeasuring = false;
+}
+
+void SystemTask::ReleaseEpochSensor() {
   if (activityEpochOwnsHeartRate) {
     // Only hand the sensor back if the watch is still asleep. The user may have picked it up
     // during the settle window, in which case the heart rate app may now be driving the sensor
@@ -915,7 +986,6 @@ void SystemTask::RecordActivityEpoch() {
     }
     activityEpochOwnsHeartRate = false;
   }
-  activityEpochMeasuring = false;
 }
 
 void SystemTask::UpdateMotion() {

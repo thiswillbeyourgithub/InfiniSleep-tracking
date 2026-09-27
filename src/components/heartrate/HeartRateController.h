@@ -43,7 +43,8 @@ namespace Pinetime {
       }
 
       /// Whether the reading is settled enough to stand on its own, rather than being shown as a
-      /// range and kept out of the activity log.
+      /// range and kept out of the activity log, which LatestSettledReading() and
+      /// SystemTask::RecordManualHeartRate see to.
       ///
       /// The bound sits just under what half a window can resolve (Ppg::earlyDataLength, 10 bpm at
       /// the current window lengths), so a coarse estimate never passes for a settled reading, and a
@@ -54,8 +55,8 @@ namespace Pinetime {
         return heartRate > 0 && uncertainty > 0 && uncertainty <= convergedUncertainty;
       }
 
-      /// The most recent non zero reading published as Running since ClearLatestReading(), or 0 when
-      /// there has been none.
+      /// The most recent settled reading, in the sense of IsConverged(), published as Running since
+      /// ClearLatestSettledReading(), or 0 when there has been none.
       ///
       /// HeartRate() alone is a snapshot, and a poor one to sample at a fixed instant: after a good
       /// window, one bad window makes the task publish Running with 0 until the next good one lands
@@ -63,15 +64,19 @@ namespace Pinetime {
       /// whole reading whenever that instant fell inside such a gap, although the sensor had given a
       /// perfectly good value seconds before. Kept here rather than in the epoch code because only
       /// the controller sees every update the task publishes.
-      uint8_t LatestReading() const {
-        return latestReading;
+      ///
+      /// Settled only, because this is what goes into the activity log: the coarse estimate off
+      /// half a window is a range of about 20 bpm, and stored as a number it would pass for a
+      /// measurement it is not.
+      uint8_t LatestSettledReading() const {
+        return latestSettledReading;
       }
 
-      /// Forgets the latest reading, so LatestReading() describes only what comes after this call.
-      /// Called at the start of every activity epoch, so a reading from an earlier measurement is
-      /// never taken for this one's.
-      void ClearLatestReading() {
-        latestReading = 0;
+      /// Forgets the latest settled reading, so LatestSettledReading() describes only what comes
+      /// after this call. Called at the start of every activity epoch, so a reading from an earlier
+      /// measurement is never taken for this one's.
+      void ClearLatestSettledReading() {
+        latestSettledReading = 0;
       }
 
       void SetService(Pinetime::Controllers::HeartRateService* service);
@@ -96,7 +101,7 @@ namespace Pinetime {
       States state = States::Stopped;
       uint8_t heartRate = 0;
       uint8_t uncertainty = 0;
-      uint8_t latestReading = 0;
+      uint8_t latestSettledReading = 0;
       bool bleNotificationsEnabled = true;
       Pinetime::Controllers::HeartRateService* service = nullptr;
     };

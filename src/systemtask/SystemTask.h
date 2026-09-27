@@ -187,7 +187,20 @@ namespace Pinetime {
       /// Begins one epoch: turns the heart rate sensor on if it is wanted, otherwise records
       /// straight away. The kind is what the record will claim the wearer was doing, and is the
       /// caller's to decide, since the sleep tracker knows something a background poll does not.
-      void BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate);
+      ///
+      /// The period is how long until the next epoch of the same kind, which bounds how long this
+      /// one may keep retrying for a heart rate.
+      void BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHeartRate, uint8_t periodMinutes);
+      /// Wakes the sensor for an epoch and arms the settle window, for its first attempt or a retry.
+      void StartEpochMeasurement();
+      /// The settle timer fired: either a measurement's window closed, which is recorded or retried,
+      /// or the wait before a retry ran out, which starts the next attempt.
+      void OnHeartRateSettleTimer();
+      /// Whether the window that just closed, having produced no settled reading, is worth another
+      /// attempt a minute later.
+      bool ShouldRetryEpochHeartRate() const;
+      /// Hands the sensor back after an epoch's measurement, if this class had taken it.
+      void ReleaseEpochSensor();
       /// Closes one tracker epoch into the activity log, and turns the sensor back off.
       void RecordActivityEpoch();
       /// Logs the reading the heart rate app currently has, so a check the wearer took by hand is
@@ -262,6 +275,14 @@ namespace Pinetime {
       /// milliseconds after the caller that started it has returned.
       Controllers::ActivityKind activityEpochKind = Controllers::ActivityKind::Unknown;
       bool activityEpochWantsHeartRate = false;
+      /// When the epoch in flight began and how long until the next one is due, so retries stop in
+      /// time for it.
+      TickType_t activityEpochBegan = 0;
+      TickType_t activityEpochPeriod = 0;
+      /// How many times the epoch in flight has gone back for a heart rate, and whether it is
+      /// waiting out the pause before the next attempt rather than measuring.
+      uint8_t activityEpochRetries = 0;
+      bool activityEpochWaitingToRetry = false;
 
       /// Measures heart rate on its own schedule, outside any sleep session, when the wearer
       /// asked for it in the settings. Does nothing while the tracker runs, and with the screen on
@@ -281,6 +302,13 @@ namespace Pinetime {
       /// recorded with whatever it has. Long enough that a still wrist usually converges,
       /// short enough that at a fifteen minute epoch the sensor is on about 3% of the night.
       static constexpr TickType_t heartRateSettlePeriod = pdMS_TO_TICKS(30 * 1000);
+      /// How long the sensor rests before an epoch that got no settled reading tries again.
+      static constexpr TickType_t heartRateRetryWait = pdMS_TO_TICKS(60 * 1000);
+      /// At most this many retries per epoch, whatever the period leaves room for. A watch left
+      /// on the table never settles, and at an hourly poll the period alone would allow some forty
+      /// attempts, which is the sensor on for a third of every hour for nothing. Five cost at most
+      /// 2.5 more minutes of sensor time than a single attempt.
+      static constexpr uint8_t maxHeartRateRetries = 5;
 
       /// Below this, and not charging, the tracker trades resolution for the chance of still
       /// being alive in the morning. A tracker that flattens the battery at 4am records a
