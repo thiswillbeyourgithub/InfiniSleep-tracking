@@ -14,7 +14,7 @@ namespace {
 
   /* While paused the bottom bar is split into Reset on the left and Resume on the right, with a gap
    * between them so they read as two buttons rather than one. */
-  constexpr lv_coord_t pausedBtnWidth = (LV_HOR_RES - 6) / 2;
+  constexpr lv_coord_t pausedBtnWidth = (LV_HOR_RES_MAX - 6) / 2;
 }
 
 static void btnEventHandler(lv_obj_t* obj, lv_event_t event) {
