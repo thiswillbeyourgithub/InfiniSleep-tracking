@@ -32,6 +32,8 @@ namespace Pinetime::Applications {
     private:
       void SetTimerRunning();
       void SetTimerStopped();
+      void SetTimerPaused();
+      void SetPausedLayout(bool paused);
       void UpdateMask();
       void DisplayTime();
       void ShowLastDuration();
@@ -41,6 +43,8 @@ namespace Pinetime::Applications {
 
       lv_obj_t* btnPlayPause;
       lv_obj_t* txtPlayPause;
+      /// Only shown while paused, next to a narrowed Resume button.
+      lv_obj_t* btnReset;
 
       lv_obj_t* btnObjectMask;
       lv_obj_t* highlightObjectMask;

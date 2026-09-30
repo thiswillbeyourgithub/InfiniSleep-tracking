@@ -11,6 +11,10 @@ namespace {
    * allows itself. Long enough to be walked back to, short enough that a timer forgotten in a
    * drawer does not empty the battery through the motor. */
   constexpr uint32_t alertingTimeoutMs = 60 * 1000;
+
+  /* While paused the bottom bar is split into Reset on the left and Resume on the right, with a gap
+   * between them so they read as two buttons rather than one. */
+  constexpr lv_coord_t pausedBtnWidth = (LV_HOR_RES - 6) / 2;
 }
 
 static void btnEventHandler(lv_obj_t* obj, lv_event_t event) {
@@ -21,6 +25,12 @@ static void btnEventHandler(lv_obj_t* obj, lv_event_t event) {
     screen->MaskReset();
   } else if (event == LV_EVENT_SHORT_CLICKED) {
     screen->ToggleRunning();
+  }
+}
+
+static void ResetBtnEventHandler(lv_obj_t* obj, lv_event_t event) {
+  if (event == LV_EVENT_CLICKED) {
+    static_cast<Timer*>(obj->user_data)->Reset();
   }
 }
 
@@ -75,8 +85,21 @@ Timer::Timer(Controllers::Timer& timerController, Controllers::MotorController& 
   // Create the label as a child of the button so it stays centered by default
   txtPlayPause = lv_label_create(btnPlayPause, nullptr);
 
+  btnReset = lv_btn_create(lv_scr_act(), nullptr);
+  btnReset->user_data = this;
+  lv_obj_set_style_local_radius(btnReset, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, LV_RADIUS_CIRCLE);
+  lv_obj_set_style_local_bg_color(btnReset, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, Colors::bgAlt);
+  lv_obj_set_event_cb(btnReset, ResetBtnEventHandler);
+  lv_obj_set_size(btnReset, pausedBtnWidth, 50);
+  lv_obj_align(btnReset, lv_scr_act(), LV_ALIGN_IN_BOTTOM_LEFT, 0, 0);
+  lv_label_set_text_static(lv_label_create(btnReset, nullptr), "Reset");
+  lv_obj_set_hidden(btnReset, true);
+
   if (timer.IsRunning()) {
     SetTimerRunning();
+  } else if (timer.IsPaused()) {
+    // The pause is held by the controller, so leaving the app and coming back finds it as it was.
+    SetTimerPaused();
   } else {
     // Opening the app on the last length used rather than on zero, which is the same state a
     // finished timer is left in.
@@ -104,7 +127,7 @@ void Timer::MaskReset() {
   // A click event is processed before a release event,
   // so the release event would override the "Pause" text without this check
   if (!timer.IsRunning() && !alerting) {
-    lv_label_set_text_static(txtPlayPause, "Start");
+    lv_label_set_text_static(txtPlayPause, timer.IsPaused() ? "Resume" : "Start");
   }
   maskPosition = 0;
   UpdateMask();
@@ -123,7 +146,7 @@ void Timer::UpdateMask() {
 void Timer::Refresh() {
   if (timer.IsRunning()) {
     DisplayTime();
-  } else if (!alerting && buttonPressing && xTaskGetTickCount() > pressTime + pdMS_TO_TICKS(150)) {
+  } else if (!alerting && !timer.IsPaused() && buttonPressing && xTaskGetTickCount() > pressTime + pdMS_TO_TICKS(150)) {
     lv_label_set_text_static(txtPlayPause, "Reset");
     maskPosition += 15;
     if (maskPosition > 240) {
@@ -144,15 +167,41 @@ void Timer::DisplayTime() {
 }
 
 void Timer::SetTimerRunning() {
+  SetPausedLayout(false);
   minuteCounter.HideControls();
   secondCounter.HideControls();
   lv_label_set_text_static(txtPlayPause, "Pause");
 }
 
 void Timer::SetTimerStopped() {
+  SetPausedLayout(false);
   minuteCounter.ShowControls();
   secondCounter.ShowControls();
   lv_label_set_text_static(txtPlayPause, "Start");
+}
+
+/* A paused timer shows the time it has left with the counters locked, since editing them would make
+ * it unclear whether Resume carries on from the pause or from the edited value. Changing the length
+ * is done by pressing Reset first, which goes back to the length the timer was started with and
+ * leaves it stopped, counters editable. */
+void Timer::SetTimerPaused() {
+  DisplayTime();
+  minuteCounter.HideControls();
+  secondCounter.HideControls();
+  lv_label_set_text_static(txtPlayPause, "Resume");
+  SetPausedLayout(true);
+}
+
+/* The Resume button is the same object as Start and Pause, narrowed to the right half, rather than a
+ * separate one: it sits inside the objmask that draws the long press Reset sweep, and moving the mask
+ * along with it keeps that sweep lined up for the states that still use it. Mask coordinates are
+ * relative to the objmask, so its line needs no adjusting when the width changes. */
+void Timer::SetPausedLayout(bool paused) {
+  const lv_coord_t width = paused ? pausedBtnWidth : LV_HOR_RES;
+  lv_obj_set_hidden(btnReset, !paused);
+  lv_obj_set_size(btnObjectMask, width, 50);
+  lv_obj_align(btnObjectMask, lv_scr_act(), LV_ALIGN_IN_BOTTOM_RIGHT, 0, 0);
+  lv_obj_set_size(btnPlayPause, width, 50);
 }
 
 void Timer::ToggleRunning() {
@@ -160,8 +209,11 @@ void Timer::ToggleRunning() {
     StopAlerting();
   } else if (timer.IsRunning()) {
     DisplayTime();
-    timer.StopTimer();
-    SetTimerStopped();
+    timer.PauseTimer();
+    SetTimerPaused();
+  } else if (timer.IsPaused()) {
+    timer.ResumeTimer();
+    SetTimerRunning();
   } else if (secondCounter.GetValue() + minuteCounter.GetValue() > 0) {
     auto timerDuration = std::chrono::minutes(minuteCounter.GetValue()) + std::chrono::seconds(secondCounter.GetValue());
     timer.StartTimer(timerDuration);
@@ -171,6 +223,8 @@ void Timer::ToggleRunning() {
 }
 
 void Timer::Reset() {
+  // Drops a pause, if there is one, so the length set before it is what is shown and started next.
+  timer.StopTimer();
   ShowLastDuration();
   SetTimerStopped();
 }
