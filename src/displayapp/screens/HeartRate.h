@@ -34,7 +34,10 @@ namespace Pinetime {
         Controllers::HeartRateController& heartRateController;
         Pinetime::System::SystemTask& systemTask;
         Pinetime::System::WakeLock wakeLock;
-        void UpdateStartStopButton(bool isRunning);
+        /// Sets the button, the colour of the reading and the wake lock to match a measurement that is
+        /// running or not, and remembers which so Refresh can tell when it stopped behind its back.
+        void ShowRunning(bool isRunning);
+        bool shownRunning = false;
         lv_obj_t* label_hr;
         lv_obj_t* label_bpm;
         lv_obj_t* label_status;

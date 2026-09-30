@@ -30,16 +30,9 @@ namespace {
 
 HeartRate::HeartRate(Controllers::HeartRateController& heartRateController, System::SystemTask& systemTask)
   : heartRateController {heartRateController}, systemTask {systemTask}, wakeLock(systemTask) {
-  bool isHrRunning = heartRateController.State() != Controllers::HeartRateController::States::Stopped;
   label_hr = lv_label_create(lv_scr_act(), nullptr);
 
   lv_obj_set_style_local_text_font(label_hr, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &jetbrains_mono_76);
-
-  if (isHrRunning) {
-    lv_obj_set_style_local_text_color(label_hr, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::highlight);
-  } else {
-    lv_obj_set_style_local_text_color(label_hr, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
-  }
 
   lv_label_set_text_static(label_hr, "---");
   lv_obj_align(label_hr, nullptr, LV_ALIGN_CENTER, 0, -40);
@@ -61,10 +54,7 @@ HeartRate::HeartRate(Controllers::HeartRateController& heartRateController, Syst
   lv_obj_align(btn_startStop, nullptr, LV_ALIGN_IN_BOTTOM_MID, 0, 0);
 
   label_startStop = lv_label_create(btn_startStop, nullptr);
-  UpdateStartStopButton(isHrRunning);
-  if (isHrRunning) {
-    wakeLock.Lock();
-  }
+  ShowRunning(heartRateController.State() != Controllers::HeartRateController::States::Stopped);
 
   taskRefresh = lv_task_create(RefreshTaskCallback, 100, LV_TASK_PRIO_MID, this);
 }
@@ -77,6 +67,14 @@ HeartRate::~HeartRate() {
 void HeartRate::Refresh() {
 
   auto state = heartRateController.State();
+
+  // Stopped from elsewhere, which is what putting the watch on its charger does. Left showing Stop,
+  // the button would need two presses to start again, and the wake lock would keep the screen on
+  // for a measurement that no longer exists.
+  if (state == Controllers::HeartRateController::States::Stopped && shownRunning) {
+    ShowRunning(false);
+  }
+
   switch (state) {
     case Controllers::HeartRateController::States::NoTouch:
     case Controllers::HeartRateController::States::NotEnoughData:
@@ -134,22 +132,22 @@ void HeartRate::OnStartStopEvent(lv_event_t event) {
       // A new run, so its first reading is logged as soon as it arrives rather than waiting out the
       // interval left over from the previous one.
       loggedThisRun = false;
-      UpdateStartStopButton(heartRateController.State() != Controllers::HeartRateController::States::Stopped);
-      wakeLock.Lock();
-      lv_obj_set_style_local_text_color(label_hr, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::highlight);
     } else {
       heartRateController.Stop();
-      UpdateStartStopButton(heartRateController.State() != Controllers::HeartRateController::States::Stopped);
-      wakeLock.Release();
-      lv_obj_set_style_local_text_color(label_hr, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
     }
+    ShowRunning(heartRateController.State() != Controllers::HeartRateController::States::Stopped);
   }
 }
 
-void HeartRate::UpdateStartStopButton(bool isRunning) {
+void HeartRate::ShowRunning(bool isRunning) {
+  shownRunning = isRunning;
   if (isRunning) {
     lv_label_set_text_static(label_startStop, "Stop");
+    wakeLock.Lock();
+    lv_obj_set_style_local_text_color(label_hr, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::highlight);
   } else {
     lv_label_set_text_static(label_startStop, "Start");
+    wakeLock.Release();
+    lv_obj_set_style_local_text_color(label_hr, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, Colors::lightGray);
   }
 }
