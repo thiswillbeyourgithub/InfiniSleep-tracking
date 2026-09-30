@@ -163,6 +163,7 @@ tests/heartrate/run.sh         # heart rate latency and accuracy, likewise, on a
 tests/heartratecontroller/run.sh  # the reading an activity epoch keeps when the last window was a bad one
 tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an hour in microseconds
 tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it takes to wrap round
+tests/timer/run.sh             # the countdown timer: a pause keeps the time left, a reset the length set
 tests/battery/run.sh           # the battery curve, against a reference discharge, and its calibration
 ```
 
