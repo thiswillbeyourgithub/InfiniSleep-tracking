@@ -416,10 +416,20 @@ void SystemTask::Work() {
             displayApp.PushMessage(Pinetime::Applications::Display::Messages::Chime);
           }
           break;
-        case Messages::OnChargingEvent:
+        case Messages::OnChargingEvent: {
+          const bool wasPowerPresent = batteryController.IsPowerPresent();
           batteryController.ReadPowerState();
+          // A watch on its charger is off the wrist, so whatever the sensor is doing there is
+          // measuring the desk, and lighting its LED for nothing. Stopped on the plug going in only,
+          // not on every event: the charging line flickers once the battery is full, and a
+          // measurement the wearer deliberately started on the charger is theirs to keep.
+          // Before GoToRunning, so the task sees the stop ahead of the WakeUp that would resume it.
+          if (!wasPowerPresent && batteryController.IsPowerPresent()) {
+            heartRateController.Stop();
+          }
           GoToRunning();
           break;
+        }
         case Messages::MeasureBatteryTimerExpired:
           batteryController.MeasureVoltage();
           break;
@@ -682,7 +692,8 @@ void SystemTask::BeginActivityEpoch(Controllers::ActivityKind kind, bool wantsHe
   // safe, and also the only case where it would otherwise report nothing all night.
   // No timer means no way to wait for the sensor, so record what is already known rather than
   // handing FreeRTOS a null handle.
-  const bool shouldMeasure = wantsHeartRate && IsScreenAsleep() && heartRateSettleTimer != nullptr;
+  // Nor on the charger, where the wrist the sensor would be reading is not there.
+  const bool shouldMeasure = wantsHeartRate && IsScreenAsleep() && !batteryController.IsPowerPresent() && heartRateSettleTimer != nullptr;
 
   if (!shouldMeasure) {
     RecordActivityEpoch();
@@ -730,8 +741,9 @@ void SystemTask::OnHeartRateSettleTimer() {
       return;
     }
     // Picked up in the meantime, the sensor is the wearer's again and is not driven from here.
-    // The epoch is recorded with whatever the heart rate app has.
-    if (!IsScreenAsleep()) {
+    // The epoch is recorded with whatever the heart rate app has. Put on the charger in the
+    // meantime, there is no wrist left to measure.
+    if (!IsScreenAsleep() || batteryController.IsPowerPresent()) {
       RecordActivityEpoch();
       return;
     }
@@ -754,7 +766,7 @@ void SystemTask::OnHeartRateSettleTimer() {
 }
 
 bool SystemTask::ShouldRetryEpochHeartRate() const {
-  if (!activityEpochWantsHeartRate || !activityEpochOwnsHeartRate || !IsScreenAsleep()) {
+  if (!activityEpochWantsHeartRate || !activityEpochOwnsHeartRate || !IsScreenAsleep() || batteryController.IsPowerPresent()) {
     return false;
   }
   if (heartRateController.LatestSettledReading() > 0) {
