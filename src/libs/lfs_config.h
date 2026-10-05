@@ -1,5 +1,11 @@
 #pragma once
 
+// littlefs keeps one lfs_t, with one read and one program cache, for every caller, so two tasks
+// inside it at once corrupt whatever either is writing. The BLE host task writes the bond when
+// the phone reconnects, and the system task flushes the logs on the very wake that the bond write
+// asks for, so the two do meet. With this defined littlefs takes FS's lock around every call.
+#define LFS_THREADSAFE
+
 #include <libraries/log/nrf_log.h>
 
 #ifndef LFS_TRACE

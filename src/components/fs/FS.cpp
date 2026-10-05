@@ -2,6 +2,7 @@
 #include <cstring>
 #include <littlefs/lfs.h>
 #include <lvgl/lvgl.h>
+#include "nrf_assert.h"
 
 using namespace Pinetime::Controllers;
 
@@ -13,6 +14,8 @@ FS::FS(Pinetime::Drivers::SpiNorFlash& driver)
       .prog = SectorProg,
       .erase = SectorErase,
       .sync = SectorSync,
+      .lock = Lock,
+      .unlock = Unlock,
 
       .read_size = 16,
       .prog_size = 8,
@@ -26,6 +29,8 @@ FS::FS(Pinetime::Drivers::SpiNorFlash& driver)
       .name_max = 50,
       .attr_max = 50,
     } {
+  mutex = xSemaphoreCreateMutex();
+  ASSERT(mutex != nullptr);
 }
 
 void FS::Init() {
@@ -114,6 +119,18 @@ lfs_ssize_t FS::GetFSSize() {
     ----------- Interface between littlefs and SpiNorFlash -----------
 
 */
+int FS::Lock(const struct lfs_config* c) {
+  Pinetime::Controllers::FS& lfs = *(static_cast<Pinetime::Controllers::FS*>(c->context));
+  xSemaphoreTake(lfs.mutex, portMAX_DELAY);
+  return 0;
+}
+
+int FS::Unlock(const struct lfs_config* c) {
+  Pinetime::Controllers::FS& lfs = *(static_cast<Pinetime::Controllers::FS*>(c->context));
+  xSemaphoreGive(lfs.mutex);
+  return 0;
+}
+
 int FS::SectorSync(const struct lfs_config* /*c*/) {
   return 0;
 }
