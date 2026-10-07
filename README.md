@@ -210,6 +210,7 @@ Battery:
 - A voltage-to-percent curve of 21 points instead of 6, so the number falls at a steady rate instead of sticking around half and then dropping ten points at once.
 - 100% held until the cell has settled off the charger, so a fresh charge no longer appears to collapse in the first hours.
 - The voltage the charger stopped at is remembered and used to scale every later reading, which takes the divider's and the ADC reference's tolerance out of the number.
+- The measured voltage in millivolts beside the percentage, as a characteristic of the standard battery service, `00080001-78fc-48fe-8e23-433b3a1942d0` (uint16, little endian), notified just ahead of every percentage so a phone can store the two together and chart one against the other.
 
 Motion and steps:
 

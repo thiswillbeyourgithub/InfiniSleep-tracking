@@ -434,7 +434,7 @@ void SystemTask::Work() {
           batteryController.MeasureVoltage();
           break;
         case Messages::BatteryPercentageUpdated:
-          nimbleController.NotifyBatteryLevel(batteryController.PercentRemaining());
+          nimbleController.NotifyBatteryLevel(batteryController.PercentRemaining(), batteryController.Voltage());
           break;
         case Messages::OnPairing:
           GoToRunning();
