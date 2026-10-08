@@ -105,6 +105,8 @@ void NimbleController::Init() {
   activityLogService.Init();
   eventLogService.Init();
   fsService.Init();
+  // Last, see InitVoltageService for why.
+  batteryInformationService.InitVoltageService();
 
   int rc;
   rc = ble_hs_util_ensure_addr(0);

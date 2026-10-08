@@ -6,6 +6,7 @@ using namespace Pinetime::Controllers;
 
 constexpr ble_uuid16_t BatteryInformationService::batteryInformationServiceUuid;
 constexpr ble_uuid16_t BatteryInformationService::batteryLevelUuid;
+constexpr ble_uuid128_t BatteryInformationService::batteryVoltageServiceUuid;
 constexpr ble_uuid128_t BatteryInformationService::batteryVoltageUuid;
 
 namespace {
@@ -31,17 +32,22 @@ BatteryInformationService::BatteryInformationService(Controllers::Battery& batte
                                .arg = this,
                                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
                                .val_handle = &batteryLevelHandle},
-                              {.uuid = &batteryVoltageUuid.u,
-                               .access_cb = BatteryInformationServiceCallback,
-                               .arg = this,
-                               .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
-                               .val_handle = &batteryVoltageHandle},
                               {0}},
     serviceDefinition {
       {/* Device Information Service */
        .type = BLE_GATT_SVC_TYPE_PRIMARY,
        .uuid = &batteryInformationServiceUuid.u,
        .characteristics = characteristicDefinition},
+      {0},
+    },
+    voltageCharacteristicDefinition {{.uuid = &batteryVoltageUuid.u,
+                                      .access_cb = BatteryInformationServiceCallback,
+                                      .arg = this,
+                                      .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
+                                      .val_handle = &batteryVoltageHandle},
+                                     {0}},
+    voltageServiceDefinition {
+      {.type = BLE_GATT_SVC_TYPE_PRIMARY, .uuid = &batteryVoltageServiceUuid.u, .characteristics = voltageCharacteristicDefinition},
       {0},
     } {
 }
@@ -52,6 +58,14 @@ void BatteryInformationService::Init() {
   ASSERT(res == 0);
 
   res = ble_gatts_add_svcs(serviceDefinition);
+  ASSERT(res == 0);
+}
+
+void BatteryInformationService::InitVoltageService() {
+  int res = ble_gatts_count_cfg(voltageServiceDefinition);
+  ASSERT(res == 0);
+
+  res = ble_gatts_add_svcs(voltageServiceDefinition);
   ASSERT(res == 0);
 }
 
