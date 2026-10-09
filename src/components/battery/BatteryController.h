@@ -40,7 +40,7 @@ namespace Pinetime {
       /// Deliberately not written to flash. It is relearned the first time the watch is charged,
       /// which is every few days, so persisting it would buy one cycle of accuracy after a reboot
       /// in exchange for a flash write the watch otherwise never makes.
-      uint16_t observedTermination = BatteryCurve::nominalTermination;
+      uint16_t observedTermination = BatteryCurve::noTerminationSeen;
 
       static Battery* instance;
       nrf_saadc_value_t saadc_value;

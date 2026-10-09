@@ -153,6 +153,28 @@ namespace {
     CHECK(BatteryCurve::Calibrated(3800, BatteryCurve::nominalTermination) == 3800);
   }
 
+  void aWatchLearnsItsErrorFromItsFirstChargeWhicheverWayItIsOff() {
+    // Before any charge has finished there is nothing to correct by.
+    CHECK(BatteryCurve::Calibrated(3800, BatteryCurve::noTerminationSeen) == 3800);
+
+    // A watch that reads low has to be corrected as surely as one that reads high. Starting from
+    // nominalTermination and keeping the highest reading only ever corrected the high one.
+    uint16_t low = BatteryCurve::KeptTermination(BatteryCurve::noTerminationSeen, 4116);
+    CHECK(low == 4116);
+    CHECK(BatteryCurve::Calibrated(3800, low) > 3800);
+    const uint16_t high = BatteryCurve::KeptTermination(BatteryCurve::noTerminationSeen, 4250);
+    CHECK(high == 4250);
+    CHECK(BatteryCurve::Calibrated(3800, high) < 3800);
+
+    // A charge interrupted early terminates lower and must not drag the correction down, and a
+    // reading outside the credible window must not move it at all.
+    low = BatteryCurve::KeptTermination(low, 4050);
+    CHECK(low == 4116);
+    low = BatteryCurve::KeptTermination(low, 3700);
+    CHECK(low == 4116);
+    CHECK(BatteryCurve::KeptTermination(BatteryCurve::noTerminationSeen, 3700) == BatteryCurve::noTerminationSeen);
+  }
+
   void anImplausibleTerminationIsIgnored() {
     // A supply too weak to charge from leaves the watch looking at the cell's own voltage with
     // charging finished, which is not a termination voltage at all. Believing it would scale every
@@ -173,6 +195,7 @@ int main() {
   everyTenthOfTheDischargeCostsTheSameSliceOfTheScale();
   theOldSixPointTableWouldFail();
   aWatchThatMeasuresLowIsPutBackOnTheScale();
+  aWatchLearnsItsErrorFromItsFirstChargeWhicheverWayItIsOff();
   anImplausibleTerminationIsIgnored();
 
   if (failures == 0) {

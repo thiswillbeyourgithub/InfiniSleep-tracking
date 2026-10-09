@@ -38,13 +38,35 @@ namespace Pinetime {
       ///
       /// @param measured what this watch's ADC reported, in millivolts
       /// @param observedTermination what this watch reported the last time charging finished, or
-      ///        nominalTermination while no full charge has been seen, which leaves the reading
+      ///        noTerminationSeen while no full charge has been seen, which leaves the reading
       ///        untouched
       inline uint16_t Calibrated(uint16_t measured, uint16_t observedTermination) {
         if (!IsCredibleTermination(observedTermination)) {
           return measured;
         }
         return static_cast<uint16_t>(static_cast<uint32_t>(measured) * nominalTermination / observedTermination);
+      }
+
+      /// What a watch keeps as its termination reading before it has seen a charge finish.
+      ///
+      /// Below the credible window, so Calibrated leaves readings alone, and below every credible
+      /// reading, so the first one replaces it whichever side of nominal it falls. Starting from
+      /// nominalTermination instead would let only a watch that reads high ever be corrected: one
+      /// that reads 4150 at termination would lose to the 4200 it started from, every time.
+      constexpr uint16_t noTerminationSeen = 0;
+
+      /// The termination reading to keep once charging has finished and the watch reads `reading`.
+      ///
+      /// The highest one seen is kept rather than the latest, because a charge interrupted early
+      /// terminates low and would otherwise drag the correction with it; a full charge puts it back.
+      ///
+      /// @param kept what was kept so far, noTerminationSeen at first
+      /// @param reading what the watch reads now, with charging finished and the charger attached
+      inline uint16_t KeptTermination(uint16_t kept, uint16_t reading) {
+        if (!IsCredibleTermination(reading)) {
+          return kept;
+        }
+        return reading > kept ? reading : kept;
       }
 
       /// Resting terminal voltage in millivolts against the share of usable charge left, and the

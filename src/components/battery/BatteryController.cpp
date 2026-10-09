@@ -71,14 +71,12 @@ void Battery::SaadcEventHandler(nrfx_saadc_evt_t const* p_event) {
     // p_event->data.done.p_buffer[0] = (adc_voltage / reference_voltage) * 1024
     voltage = p_event->data.done.p_buffer[0] * (8 * 600) / 1024;
 
-    if (isFull && BatteryCurve::IsCredibleTermination(voltage)) {
+    if (isFull) {
       // Charging has stopped with the charger still holding the cell, so this reading is the
       // charger's termination voltage as this watch measures it. Comparing it against the voltage
       // a charger really terminates at gives the error in the divider and the ADC reference, and
-      // every later reading is corrected by it. The highest one seen is kept rather than the
-      // latest, because a charge interrupted early terminates low and would otherwise drag the
-      // correction with it; a full charge puts it back.
-      observedTermination = std::max(observedTermination, voltage);
+      // every later reading is corrected by it.
+      observedTermination = BatteryCurve::KeptTermination(observedTermination, voltage);
     }
 
     uint8_t newPercent = 100;
