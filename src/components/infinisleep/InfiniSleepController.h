@@ -7,6 +7,7 @@
 #include "components/fs/FS.h"
 #include "components/heartrate/HeartRateController.h"
 #include "components/alarm/AlarmController.h"
+#include "components/infinisleep/WakeAlarmSnooze.h"
 
 #include <chrono>
 
@@ -56,6 +57,7 @@ namespace Pinetime {
       void Init(System::SystemTask* systemTask);
       void SaveWakeAlarm();
       void SaveInfiniSleepSettings();
+      /// The wake up time set by hand, which ends any snooze: it is the wearer's new choice.
       void SetWakeAlarmTime(uint8_t wakeAlarmHr, uint8_t wakeAlarmMin);
       void ScheduleWakeAlarm();
       void DisableWakeAlarm();
@@ -68,28 +70,22 @@ namespace Pinetime {
 
       uint8_t pushesLeftToStopWakeAlarm = PUSHES_TO_STOP_ALARM;
 
-      bool isSnoozing = false;
-      uint8_t preSnoozeMinutes = 255;
-      uint8_t preSnnoozeHours = 255;
 
       InfiniSleepControllerTypes::SessionData prevSessionData;
 
-      void SetPreSnoozeTime() {
-        if (preSnoozeMinutes != 255 || preSnnoozeHours != 255) {
-          return;
-        }
-        preSnoozeMinutes = wakeAlarm.minutes;
-        preSnnoozeHours = wakeAlarm.hours;
+      bool IsSnoozing() const {
+        return snooze.IsSnoozing();
       }
 
-      void RestorePreSnoozeTime() {
-        if (preSnoozeMinutes == 255 || preSnnoozeHours == 255) {
-          return;
-        }
-        wakeAlarm.minutes = preSnoozeMinutes;
-        wakeAlarm.hours = preSnnoozeHours;
-        preSnoozeMinutes = 255;
-        preSnnoozeHours = 255;
+      /// Moves the alarm to a snoozed time, keeping the time the wearer set for when the ring ends.
+      void SnoozeWakeAlarmTo(uint8_t hours, uint8_t minutes) {
+        snooze.Snooze(wakeAlarm.hours, wakeAlarm.minutes, hours, minutes);
+        wakeAlarmChanged = true;
+      }
+
+      /// The ring is over: the alarm goes back to the time the wearer set.
+      void EndSnooze() {
+        snooze.End(wakeAlarm.hours, wakeAlarm.minutes);
       }
 
       uint8_t Hours() const {
@@ -138,6 +134,7 @@ namespace Pinetime {
       };
 
       WakeAlarmSettings wakeAlarm;
+      WakeAlarmSnooze snooze;
 
       // Dertermine the steps for the gradual wake alarm, the corresponding vibration durations determine the power of the vibration
       static constexpr uint16_t gradualWakeSteps[9] = {30, 60, 90, 120, 180, 240, 300, 350, 600}; // In seconds

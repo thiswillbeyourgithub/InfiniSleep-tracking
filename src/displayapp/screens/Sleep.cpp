@@ -705,12 +705,9 @@ void Sleep::OnButtonEvent(lv_obj_t* obj, lv_event_t event) {
       if (alarmEnabled) {
         infiniSleepController.ScheduleWakeAlarm();
       } else {
+        // Which also ends a snooze, and switching on cannot find one: a snoozed alarm is on
         infiniSleepController.DisableWakeAlarm();
       }
-      if (infiniSleepController.isSnoozing) {
-        infiniSleepController.RestorePreSnoozeTime();
-      }
-      infiniSleepController.isSnoozing = false;
       if (alarmEnabled) {
         // The alarm is set, so the next thing to do is to start the tracker
         displayState = SleepDisplayState::Info;
@@ -893,10 +890,7 @@ bool Sleep::StopAlarmPush() {
     return true;
   }
 
-  if (infiniSleepController.isSnoozing) {
-    infiniSleepController.RestorePreSnoozeTime();
-  }
-  infiniSleepController.isSnoozing = false;
+  infiniSleepController.EndSnooze();
   StopAlerting();
   if (infiniSleepController.IsTrackerEnabled()) {
     StopTrackerAndLeave();
@@ -988,12 +982,7 @@ void Sleep::SnoozeWakeAlarm() {
   // Wraps over midnight, so snoozing at 23:58 gives 00:01 and not 24:01
   const uint16_t newSnoozeMinutes = infiniSleepController.GetTimeOfDayInMinutesFromNow(SNOOZE_MINUTES);
 
-  if (infiniSleepController.isSnoozing != true) {
-    infiniSleepController.SetPreSnoozeTime();
-  }
-  infiniSleepController.isSnoozing = true;
-
-  infiniSleepController.SetWakeAlarmTime(newSnoozeMinutes / 60, newSnoozeMinutes % 60);
+  infiniSleepController.SnoozeWakeAlarmTo(newSnoozeMinutes / 60, newSnoozeMinutes % 60);
 
   hourCounter.SetValue(newSnoozeMinutes / 60);
   minuteCounter.SetValue(newSnoozeMinutes % 60);

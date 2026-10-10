@@ -446,7 +446,7 @@ void DisplayApp::Refresh() {
         }
         // motorController.RunForDuration(infiniSleepController.gradualWakeVibrationDurations[-1 + infiniSleepController.gradualWakeStep]);
 
-        if (infiniSleepController.isSnoozing == false) {
+        if (!infiniSleepController.IsSnoozing()) {
           motorController.GradualWakeBuzz();
           NRF_LOG_INFO("Gradual wake triggered");
         }

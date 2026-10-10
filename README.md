@@ -166,6 +166,7 @@ tests/pomodoro/run.sh          # the pomodoro state machine, stepped through an 
 tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it takes to wrap round
 tests/timer/run.sh             # the countdown timer: a pause keeps the time left, a reset the length set
 tests/battery/run.sh           # the battery curve, against a reference discharge, and its calibration
+tests/infinisleep/run.sh       # the snooze: the time set by hand outlives the snooze before it
 ```
 
 ## Flashlight

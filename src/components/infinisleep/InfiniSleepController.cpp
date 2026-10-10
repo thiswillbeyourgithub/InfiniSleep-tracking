@@ -135,8 +135,7 @@ void InfiniSleepController::SetWakeAlarmTime(uint8_t wakeAlarmHr, uint8_t wakeAl
   if (wakeAlarm.hours == wakeAlarmHr && wakeAlarm.minutes == wakeAlarmMin) {
     return;
   }
-  wakeAlarm.hours = wakeAlarmHr;
-  wakeAlarm.minutes = wakeAlarmMin;
+  snooze.SetByHand(wakeAlarm.hours, wakeAlarm.minutes, wakeAlarmHr, wakeAlarmMin);
   wakeAlarmChanged = true;
 }
 
@@ -206,6 +205,9 @@ void InfiniSleepController::DisableWakeAlarm() {
   xTimerStop(gradualWakeTimer, 0);
   gradualWakeStep = 9;
   isAlerting = false;
+  // An alarm switched off has no ring left to snooze, so stopping the tracker after a snooze puts
+  // the time set by hand back too.
+  EndSnooze();
   if (wakeAlarm.isEnabled) {
     wakeAlarm.isEnabled = false;
     wakeAlarmChanged = true;
@@ -372,10 +374,8 @@ void InfiniSleepController::LoadSettingsFromFile() {
 void InfiniSleepController::SaveSettingsToFile() const {
   lfs_file_t alarmFile;
   WakeAlarmSettings tempWakeAlarm = wakeAlarm;
-  if (isSnoozing) {
-    tempWakeAlarm.hours = preSnnoozeHours;
-    tempWakeAlarm.minutes = preSnoozeMinutes;
-  }
+  tempWakeAlarm.hours = snooze.SetHours(wakeAlarm.hours);
+  tempWakeAlarm.minutes = snooze.SetMinutes(wakeAlarm.minutes);
   if (fs.FileOpen(&alarmFile, "wakeAlarm.dat", LFS_O_WRONLY | LFS_O_CREAT) != LFS_ERR_OK) {
     NRF_LOG_WARNING("[InfiniSleepController] Failed to open alarm data file for saving");
     return;
