@@ -82,7 +82,7 @@ void Battery::SaadcEventHandler(nrfx_saadc_evt_t const* p_event) {
     uint8_t newPercent = 100;
     if (!isFull) {
       // max. voltage while charging is higher than when discharging
-      newPercent = std::min(BatteryCurve::PercentFromVoltage(BatteryCurve::Calibrated(voltage, observedTermination)),
+      newPercent = std::min(BatteryCurve::PercentFromVoltage(Voltage()),
                             isCharging ? uint8_t {99} : uint8_t {100});
     }
 

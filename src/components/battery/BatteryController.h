@@ -19,8 +19,11 @@ namespace Pinetime {
         return percentRemaining;
       }
 
+      /// The voltage corrected for this watch's divider and ADC reference, the same one the
+      /// percentage is read from, so that the two shown side by side agree. The raw reading stays
+      /// private: only the termination it is compared against needs it.
       uint16_t Voltage() const {
-        return voltage;
+        return BatteryCurve::Calibrated(voltage, observedTermination);
       }
 
       bool IsCharging() const {

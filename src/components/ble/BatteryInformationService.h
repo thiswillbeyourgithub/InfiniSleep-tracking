@@ -37,10 +37,10 @@ namespace Pinetime {
 
       static constexpr ble_uuid16_t batteryLevelUuid {.u {.type = BLE_UUID_TYPE_16}, .value = batteryLevelId};
 
-      /// 00080000-78fc-48fe-8e23-433b3a1942d0 and its one characteristic, 00080001, the measured voltage
-      /// in millivolts, uint16 little endian. The standard service has no voltage, and the percentage
-      /// alone hides what the battery is doing: the curve that turns one into the other is flat for
-      /// most of a charge.
+      /// 00080000-78fc-48fe-8e23-433b3a1942d0 and its one characteristic, 00080001, the voltage
+      /// in millivolts after calibration, uint16 little endian. The standard service has no voltage,
+      /// and the percentage alone hides what the battery is doing: the curve that turns one into the
+      /// other is flat for most of a charge.
       static constexpr ble_uuid128_t batteryVoltageServiceUuid {
         .u {.type = BLE_UUID_TYPE_128},
         .value = {0xd0, 0x42, 0x19, 0x3a, 0x3b, 0x43, 0x23, 0x8e, 0xfe, 0x48, 0xfc, 0x78, 0x00, 0x00, 0x08, 0x00}};
