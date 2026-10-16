@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <components/battery/BatteryCurve.h>
+#include <components/battery/LearnedCurve.h>
+#include <components/fs/FS.h>
 #include <drivers/include/nrfx_saadc.h>
 #include <systemtask/SystemTask.h>
 
@@ -14,6 +16,9 @@ namespace Pinetime {
       void ReadPowerState();
       void MeasureVoltage();
       void Register(System::SystemTask* systemTask);
+
+      /// Reads back the curve learned before the last reboot. After FS::Init.
+      void Init(FS& fs);
 
       uint8_t PercentRemaining() const {
         return percentRemaining;
@@ -40,10 +45,29 @@ namespace Pinetime {
       /// The highest voltage seen while charging was finished, which is this watch's own reading of
       /// a voltage the curve knows the real value of.
       ///
-      /// Deliberately not written to flash. It is relearned the first time the watch is charged,
-      /// which is every few days, so persisting it would buy one cycle of accuracy after a reboot
-      /// in exchange for a flash write the watch otherwise never makes.
+      /// Kept in flash beside the learned curve, since that curve is drawn on the calibrated scale:
+      /// read with no calibration after a reboot it would be off by the watch's whole error until
+      /// the next charge finished.
       uint16_t observedTermination = BatteryCurve::noTerminationSeen;
+
+      /// The curve learned from this watch's own discharges, read in the ADC interrupt and folded
+      /// into on plug-in from the system task, inside a critical section.
+      LearnedCurve learnedCurve;
+      TickType_t lastSampleTick = 0;
+      FS* fs = nullptr;
+
+      static constexpr const char* learnedCurvePath = "/battery_curve.dat";
+      static constexpr uint8_t learnedCurveVersion = 1;
+      struct LearnedCurveFile {
+        uint8_t version;
+        uint16_t observedTermination;
+        LearnedCurve::Minutes minutes;
+      };
+      /// The termination last written, so that unplugging writes only when a charge changed it.
+      uint16_t savedTermination = BatteryCurve::noTerminationSeen;
+
+      void OnPowerChanged();
+      void Save(const LearnedCurve::Minutes& minutes);
 
       static Battery* instance;
       nrf_saadc_value_t saadc_value;

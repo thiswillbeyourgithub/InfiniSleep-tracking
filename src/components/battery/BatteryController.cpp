@@ -15,14 +15,69 @@ Battery::Battery() {
 }
 
 void Battery::ReadPowerState() {
+  const bool wasPowerPresent = isPowerPresent;
   isCharging = (nrf_gpio_pin_read(PinMap::Charging) == 0);
   isPowerPresent = (nrf_gpio_pin_read(PinMap::PowerPresent) == 0);
+  if (isPowerPresent != wasPowerPresent) {
+    OnPowerChanged();
+  }
 
   if (isPowerPresent && !isCharging) {
     isFull = true;
   } else if (!isPowerPresent) {
     isFull = false;
   }
+}
+
+void Battery::OnPowerChanged() {
+  // Always called from the system task, while the ADC interrupt may be reading or feeding the
+  // curve: the critical section keeps the two apart, and the flash write stays outside it.
+  //
+  // At most two writes a charge: on plug-in when the discharge taught the curve something, on
+  // unplug when the charge moved the termination.
+  taskENTER_CRITICAL();
+  bool changed;
+  if (isPowerPresent) {
+    changed = learnedCurve.EndDischarge();
+  } else {
+    learnedCurve.StartDischarge();
+    changed = observedTermination != savedTermination;
+  }
+  const LearnedCurve::Minutes minutes = learnedCurve.Learned();
+  taskEXIT_CRITICAL();
+  if (changed) {
+    Save(minutes);
+  }
+}
+
+void Battery::Init(FS& fs) {
+  this->fs = &fs;
+  LearnedCurveFile file;
+  lfs_file_t handle;
+  if (fs.FileOpen(&handle, learnedCurvePath, LFS_O_RDONLY) != LFS_ERR_OK) {
+    return;
+  }
+  const int read = fs.FileRead(&handle, reinterpret_cast<uint8_t*>(&file), sizeof(file));
+  fs.FileClose(&handle);
+  if (read == sizeof(file) && file.version == learnedCurveVersion) {
+    learnedCurve.Restore(file.minutes);
+    observedTermination = BatteryCurve::KeptTermination(BatteryCurve::noTerminationSeen, file.observedTermination);
+    savedTermination = observedTermination;
+  }
+}
+
+void Battery::Save(const LearnedCurve::Minutes& minutes) {
+  if (fs == nullptr) {
+    return;
+  }
+  const LearnedCurveFile file {learnedCurveVersion, observedTermination, minutes};
+  lfs_file_t handle;
+  if (fs->FileOpen(&handle, learnedCurvePath, LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC) != LFS_ERR_OK) {
+    return;
+  }
+  fs->FileWrite(&handle, reinterpret_cast<const uint8_t*>(&file), sizeof(file));
+  fs->FileClose(&handle);
+  savedTermination = observedTermination;
 }
 
 void Battery::MeasureVoltage() {
@@ -82,7 +137,14 @@ void Battery::SaadcEventHandler(nrfx_saadc_evt_t const* p_event) {
     uint8_t newPercent = 100;
     if (!isFull) {
       // max. voltage while charging is higher than when discharging
-      newPercent = std::min(BatteryCurve::PercentFromVoltage(Voltage()),
+      const TickType_t now = xTaskGetTickCountFromISR();
+      // Learning needs the calibrated scale it will later be read on, so not before the first
+      // finished charge, which a discharge worth learning from starts with anyway.
+      if (!isPowerPresent && BatteryCurve::IsCredibleTermination(observedTermination)) {
+        learnedCurve.OnSample(Voltage(), (now - lastSampleTick) / configTICK_RATE_HZ);
+      }
+      lastSampleTick = now;
+      newPercent = std::min(learnedCurve.Percent(Voltage()),
                             isCharging ? uint8_t {99} : uint8_t {100});
     }
 

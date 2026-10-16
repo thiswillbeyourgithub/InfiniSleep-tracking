@@ -208,9 +208,10 @@ Heart rate:
 
 Battery:
 
-- A voltage-to-percent curve of 21 points instead of 6, so the number falls at a steady rate instead of sticking around half and then dropping ten points at once.
+- A voltage-to-percent curve of 21 points instead of 6, running from 3.35 V (0%) to 4.15 V (100%), so the number falls at a steady rate instead of sticking around half and then dropping ten points at once.
+- The watch then learns its own curve: the scale is cut into 80 slices of 10 mV, the time each slice takes to cross is measured on every discharge, and on plug-in each slice crossed moves a quarter of the way to what was measured. The percentage is the time stored below the current voltage over the time stored in all slices, so after a few discharges it falls at a steady rate in time on this watch, this cell and this wearer. Slices not crossed yet borrow their share from the 21 point curve, so partial discharges teach what they cover and nothing more. Saved in `/battery_curve.dat` with the termination voltage, at most two writes per charge.
 - 100% held until the cell has settled off the charger, so a fresh charge no longer appears to collapse in the first hours.
-- The voltage the charger stopped at is remembered and used to scale every later reading, which takes the divider's and the ADC reference's tolerance out of the number.
+- The voltage the charger stopped at is remembered, across reboots, and used to scale every later reading, which takes the divider's and the ADC reference's tolerance out of the number.
 - The voltage in millivolts, corrected by the remembered termination like the percentage is, beside the percentage, on `00080001-78fc-48fe-8e23-433b3a1942d0` (uint16, little endian) in a service of its own, registered after every other one so no existing attribute handle moves, notified just ahead of every percentage so a phone can store the two together and chart one against the other.
 
 Motion and steps:

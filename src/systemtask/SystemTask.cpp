@@ -153,6 +153,7 @@ void SystemTask::Work() {
   touchPanel.Init();
   dateTimeController.Register(this);
   batteryController.Register(this);
+  batteryController.Init(fs);
   motionSensor.SoftReset();
   alarmController.Init(this);
   infiniSleepController.Init(this);
