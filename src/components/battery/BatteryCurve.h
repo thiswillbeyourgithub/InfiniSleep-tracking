@@ -100,29 +100,35 @@ namespace Pinetime {
       constexpr uint16_t emptyMillivolts = 3350;
       constexpr uint16_t fullMillivolts = 4150;
 
-      inline uint8_t PercentFromVoltage(uint16_t millivolts) {
-        static const Utility::LinearApproximation<uint16_t, uint8_t, 21> approx {{{{emptyMillivolts, 0},
-                                                                                  {3624, 5},
-                                                                                  {3690, 10},
-                                                                                  {3710, 15},
-                                                                                  {3729, 20},
-                                                                                  {3748, 25},
-                                                                                  {3767, 30},
-                                                                                  {3782, 35},
-                                                                                  {3797, 40},
-                                                                                  {3815, 45},
-                                                                                  {3834, 50},
-                                                                                  {3850, 55},
-                                                                                  {3868, 60},
-                                                                                  {3896, 65},
-                                                                                  {3933, 70},
-                                                                                  {3968, 75},
-                                                                                  {4002, 80},
-                                                                                  {4042, 85},
-                                                                                  {4084, 90},
-                                                                                  {4118, 95},
-                                                                                  {fullMillivolts, 100}}}};
+      /// The reference curve in hundredths of a percent, fine enough for LearnedCurve to take the
+      /// share of the charge a 10 mV slice holds off it.
+      inline uint16_t HundredthsFromVoltage(uint16_t millivolts) {
+        static const Utility::LinearApproximation<uint16_t, uint16_t, 21> approx {{{{emptyMillivolts, 0},
+                                                                                      {3624, 500},
+                                                                                      {3690, 1000},
+                                                                                      {3710, 1500},
+                                                                                      {3729, 2000},
+                                                                                      {3748, 2500},
+                                                                                      {3767, 3000},
+                                                                                      {3782, 3500},
+                                                                                      {3797, 4000},
+                                                                                      {3815, 4500},
+                                                                                      {3834, 5000},
+                                                                                      {3850, 5500},
+                                                                                      {3868, 6000},
+                                                                                      {3896, 6500},
+                                                                                      {3933, 7000},
+                                                                                      {3968, 7500},
+                                                                                      {4002, 8000},
+                                                                                      {4042, 8500},
+                                                                                      {4084, 9000},
+                                                                                      {4118, 9500},
+                                                                                      {fullMillivolts, 10000}}}};
         return approx.GetValue(millivolts);
+      }
+
+      inline uint8_t PercentFromVoltage(uint16_t millivolts) {
+        return static_cast<uint8_t>(HundredthsFromVoltage(millivolts) / 100);
       }
     }
   }

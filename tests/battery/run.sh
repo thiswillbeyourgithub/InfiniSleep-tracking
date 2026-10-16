@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Builds and runs the battery curve tests on the host. No hardware, no docker, no toolchain beyond
+# Builds and runs the battery curve and learned curve tests on the host. No hardware, no docker, no toolchain beyond
 # a C++17 compiler.
 #
 #   tests/battery/run.sh
@@ -13,11 +13,12 @@ set -e
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$here/../.."
-out="${TMPDIR:-/tmp}/test_battery_curve"
+out="${TMPDIR:-/tmp}"
 
-${CXX:-c++} -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined \
-  -I "$here/../stubs" -I "$root/src" \
-  "$here/test_battery_curve.cpp" \
-  -o "$out"
-
-"$out"
+for test in test_battery_curve test_learned_curve; do
+  ${CXX:-c++} -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined \
+    -I "$here/../stubs" -I "$root/src" \
+    "$here/$test.cpp" \
+    -o "$out/$test"
+  "$out/$test"
+done
