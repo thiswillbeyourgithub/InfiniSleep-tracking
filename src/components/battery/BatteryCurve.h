@@ -85,38 +85,42 @@ namespace Pinetime {
       /// costs well under a millivolt and what the ADC reads is the resting voltage. Twenty-one of
       /// them, five points of scale apart, hold the shape to within two percent everywhere.
       ///
-      /// Both ends are chosen rather than measured. Zero sits at 3500 mV, where the watch already
-      /// called it empty and comfortably above the brown-out. A hundred sits at 4140 rather than at
-      /// the 4200 mV the charger stops at, because a cell taken off a charger reads 4.20 V and
-      /// settles towards 4.15 over the next few hours with very little charge actually gone:
-      /// counting that settling as capacity is what makes a fresh charge appear to collapse.
-      /// Everything from 4140 up reads full, which is what those five points of scale buy. Widen
-      /// that gap if a fresh charge still falls away too fast, narrow it if the watch sits on 100%
-      /// for too long.
-      constexpr uint16_t emptyMillivolts = 3500;
-      constexpr uint16_t fullMillivolts = 4140;
+      /// Both ends are chosen rather than measured. Zero sits at 3350 mV, low on the knee, so the
+      /// little charge left below 3.5 V is counted instead of the watch reading 0% while it still
+      /// runs. A hundred sits at 4150 rather than at the 4200 mV the charger stops at, because a
+      /// cell taken off a charger reads 4.20 V and settles towards 4.15 over the next few hours
+      /// with very little charge actually gone: counting that settling as capacity is what makes a
+      /// fresh charge appear to collapse. Everything from 4150 up reads full. Widen that gap if a
+      /// fresh charge still falls away too fast, narrow it if the watch sits on 100% for too long.
+      ///
+      /// The points between are not a straight line from one end to the other: each is the voltage
+      /// at which the reference cell has another twentieth of the window's charge left, so at a
+      /// steady drain the number falls at a steady rate. They are regenerated from the reference
+      /// discharge in tests/battery/test_battery_curve.cpp whenever an end moves.
+      constexpr uint16_t emptyMillivolts = 3350;
+      constexpr uint16_t fullMillivolts = 4150;
 
       inline uint8_t PercentFromVoltage(uint16_t millivolts) {
         static const Utility::LinearApproximation<uint16_t, uint8_t, 21> approx {{{{emptyMillivolts, 0},
-                                                                                  {3647, 5},
-                                                                                  {3696, 10},
-                                                                                  {3715, 15},
-                                                                                  {3733, 20},
-                                                                                  {3752, 25},
-                                                                                  {3770, 30},
-                                                                                  {3784, 35},
-                                                                                  {3798, 40},
-                                                                                  {3816, 45},
-                                                                                  {3835, 50},
+                                                                                  {3624, 5},
+                                                                                  {3690, 10},
+                                                                                  {3710, 15},
+                                                                                  {3729, 20},
+                                                                                  {3748, 25},
+                                                                                  {3767, 30},
+                                                                                  {3782, 35},
+                                                                                  {3797, 40},
+                                                                                  {3815, 45},
+                                                                                  {3834, 50},
                                                                                   {3850, 55},
-                                                                                  {3867, 60},
-                                                                                  {3893, 65},
-                                                                                  {3927, 70},
-                                                                                  {3963, 75},
-                                                                                  {3995, 80},
-                                                                                  {4031, 85},
-                                                                                  {4075, 90},
-                                                                                  {4108, 95},
+                                                                                  {3868, 60},
+                                                                                  {3896, 65},
+                                                                                  {3933, 70},
+                                                                                  {3968, 75},
+                                                                                  {4002, 80},
+                                                                                  {4042, 85},
+                                                                                  {4084, 90},
+                                                                                  {4118, 95},
                                                                                   {fullMillivolts, 100}}}};
         return approx.GetValue(millivolts);
       }

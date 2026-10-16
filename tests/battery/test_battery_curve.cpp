@@ -33,8 +33,8 @@ namespace {
     double millivolts;
   };
 
-  constexpr ReferencePoint reference[] = {{0, 3400},  {5, 3620},  {10, 3690}, {15, 3710}, {20, 3730}, {25, 3750}, {30, 3770},
-                                          {35, 3785}, {40, 3800}, {45, 3820}, {50, 3840}, {55, 3855}, {60, 3875}, {65, 3910},
+  constexpr ReferencePoint reference[] = {{0, 3300},  {1, 3400},  {5, 3620},  {10, 3690}, {15, 3710}, {20, 3730}, {25, 3750},
+                                          {30, 3770}, {35, 3785}, {40, 3800}, {45, 3820}, {50, 3840}, {55, 3855}, {60, 3875}, {65, 3910},
                                           {70, 3950}, {75, 3985}, {80, 4020}, {85, 4070}, {90, 4105}, {95, 4140}, {100, 4170}};
   constexpr int referenceSize = sizeof(reference) / sizeof(reference[0]);
 
@@ -94,6 +94,9 @@ namespace {
   }
 
   void theScaleRunsFromEmptyToFullAndStopsThere() {
+    // The ends asked for: 3.35 V is empty and 4.15 V is full, on the calibrated scale.
+    CHECK(BatteryCurve::PercentFromVoltage(3350) == 0);
+    CHECK(BatteryCurve::PercentFromVoltage(4150) == 100);
     CHECK(BatteryCurve::PercentFromVoltage(BatteryCurve::emptyMillivolts) == 0);
     CHECK(BatteryCurve::PercentFromVoltage(BatteryCurve::fullMillivolts) == 100);
     // A flat cell and a cell still on the charger both sit outside the table, and neither may wrap
