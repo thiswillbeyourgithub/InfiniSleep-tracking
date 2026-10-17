@@ -51,6 +51,12 @@ namespace Pinetime {
       static constexpr uint16_t spectralAvgMax = 2;
       // Multiple Peaks above this threshold (% of max) are rejected
       static constexpr float peakDetectionThreshold = 0.6f;
+      // A local maximum at half the frequency of the strongest peak, at least this fraction of it,
+      // makes the strongest peak the second harmonic and the lower one the heart rate. Chosen on
+      // synthetic pulses: a true 120 bpm with only noise at 60 stays under it, a 65 bpm read as
+      // 130 clears it. So does a 1 Hz arm swing nearly as strong as the pulse: walking at 120 bpm can
+      // be read as 60, the price of not reading a resting 65 as 130.
+      static constexpr float harmonicThreshold = 0.45f;
       // Maximum peak width (bins) at threshold for valid peak.
       static constexpr float maxPeakWidth = 2.5f;
       // Metric for spectrum noise level.

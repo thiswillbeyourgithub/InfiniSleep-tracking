@@ -198,6 +198,22 @@ int main() {
     }
   }
 
+  // A pulse whose second harmonic is as strong as the fundamental, the shape a sharp systolic rise
+  // gives. Detrend differentiates, so in the spectrum the harmonic comes out about twice the heart
+  // rate, and a 65 bpm wrist was read as 130.
+  printf("second harmonic as strong as the heart rate\n");
+  for (float bpm : {50.0f, 65.0f, 80.0f, 100.0f}) {
+    Run run = Measure(bpm, 20.0f, 200.0f, 10.0f, 0.0f, 1.0f);
+    printf("  %5.0f bpm: %2zu readings, first %3d, at 20 s = %3d bpm, worst error %2d\n",
+           bpm,
+           run.readings.size(),
+           run.First(),
+           run.Last(),
+           run.WorstError(bpm));
+    CHECK(run.Any());
+    CHECK(run.WorstError(bpm) <= 3);
+  }
+
   // Nothing on the wrist means no reading, however loud the noise. A watch that invents a number
   // here logs it as a heart rate, which is worse than showing nothing.
   printf("no pulse\n");

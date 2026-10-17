@@ -101,14 +101,26 @@ namespace {
     }
   }
 
-  float SpectrumMax(const std::array<float, Ppg::spectrumLength>& data, int start, int end) {
-    float max = 0.0f;
+  int SpectrumArgMax(const std::array<float, Ppg::spectrumLength>& data, int start, int end) {
+    int argMax = start;
     for (int idx = start; idx < end; idx++) {
-      if (data.at(idx) > max) {
-        max = data.at(idx);
+      if (data.at(idx) > data.at(argMax)) {
+        argMax = idx;
       }
     }
-    return max;
+    return argMax;
+  }
+
+  // Height of the highest local maximum within a bin of `center`, or 0 when there is none. Used to
+  // look for the harmonic partner of the strongest peak, half or twice its frequency.
+  float PeakNear(const std::array<float, Ppg::spectrumLength>& data, int center) {
+    float peak = 0.0f;
+    for (int idx = std::max(center - 1, 1); idx <= center + 1 && idx < Ppg::spectrumLength - 1; idx++) {
+      if (data.at(idx) > data.at(idx - 1) && data.at(idx) >= data.at(idx + 1) && data.at(idx) > peak) {
+        peak = data.at(idx);
+      }
+    }
+    return peak;
   }
 
   void Detrend(std::array<float, Ppg::dataLength>& signal, int size) {
@@ -232,9 +244,24 @@ void Ppg::ComputeSpectrum(uint16_t length) {
 float Ppg::PeakFrequency(float maxWidth) {
   float location = 0.0f;
   float peakWidth = 0.0f;
-  float max = SpectrumMax(spectrum, hrROIbegin, hrROIend);
+  const int top = SpectrumArgMax(spectrum, hrROIbegin, hrROIend);
+  float max = spectrum.at(top);
   float signalToNoiseRatio = SignalToNoise(spectrum, hrROIbegin, hrROIend, max);
   if (signalToNoiseRatio > signalToNoiseThreshold && spectrum.at(0) < dcThreshold * max) {
+    // A pulse is not a sine, so its spectrum carries a second harmonic at twice the heart rate, and
+    // Detrend differentiates, which weighs every bin by its frequency: a harmonic half the height
+    // of the fundamental in the raw signal comes out level with it. Left to the peak search, the two
+    // read as two candidates and the window is thrown away, or the harmonic wins and the heart rate
+    // is reported doubled. So the search ends below the harmonic. When a real peak sits at half the
+    // frequency of the strongest one, the strongest is the harmonic and the lower one the heart rate.
+    float searchEnd = static_cast<float>(hrROIend);
+    const float fundamental = top >= 2 * hrROIbegin ? PeakNear(spectrum, (top + 1) / 2) : 0.0f;
+    if (fundamental >= harmonicThreshold * max) {
+      max = fundamental;
+      searchEnd = 0.75f * static_cast<float>(top);
+    } else if (PeakNear(spectrum, 2 * top) > 0.0f) {
+      searchEnd = std::min(searchEnd, 1.5f * static_cast<float>(top));
+    }
     // Reuse VImag for interpolation x values passed to PeakSearch
     for (int idx = 0; idx < dataLength; idx++) {
       vImag[idx] = idx;
@@ -244,7 +271,7 @@ float Ppg::PeakFrequency(float maxWidth) {
                           peakDetectionThreshold * max,
                           peakWidth,
                           static_cast<float>(hrROIbegin),
-                          static_cast<float>(hrROIend),
+                          searchEnd,
                           spectrum.size());
     location *= freqResolution;
   }
