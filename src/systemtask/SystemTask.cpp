@@ -239,6 +239,10 @@ void SystemTask::Work() {
     if (state == SystemTaskState::Running && logSlots.IsDirty()) {
       logSlots.Flush();
     }
+    // Same again: the charger is plugged and unplugged with the screen asleep more often than not.
+    if (state == SystemTaskState::Running && batteryController.IsDirty()) {
+      batteryController.Flush();
+    }
 
     // The night's records only exist in RAM until the watch is next woken, so a battery that
     // dies before morning takes them with it. This is the one moment where that stops being

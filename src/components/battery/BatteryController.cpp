@@ -31,23 +31,22 @@ void Battery::ReadPowerState() {
 
 void Battery::OnPowerChanged() {
   // Always called from the system task, while the ADC interrupt may be reading or feeding the
-  // curve: the critical section keeps the two apart, and the flash write stays outside it.
+  // curve: the critical section keeps the two apart.
   //
-  // At most two writes a charge: on plug-in when the discharge taught the curve something, on
-  // unplug when the charge moved the termination.
+  // Only marks the file dirty. The charger is usually plugged and unplugged with the screen asleep,
+  // when the flash and its SPI bus are powered down, and a write then does not fail but blocks
+  // forever until the watchdog resets the watch. The system task calls Flush once it is awake.
+  //
+  // At most two writes a charge: after plug-in when the discharge taught the curve something,
+  // after unplug when the charge moved the termination.
   taskENTER_CRITICAL();
-  bool changed;
   if (isPowerPresent) {
-    changed = learnedCurve.EndDischarge();
+    dirty = learnedCurve.EndDischarge() || dirty;
   } else {
     learnedCurve.StartDischarge();
-    changed = observedTermination != savedTermination;
+    dirty = observedTermination != savedTermination || dirty;
   }
-  const LearnedCurve::Minutes minutes = learnedCurve.Learned();
   taskEXIT_CRITICAL();
-  if (changed) {
-    Save(minutes);
-  }
 }
 
 void Battery::Init(FS& fs) {
@@ -66,18 +65,21 @@ void Battery::Init(FS& fs) {
   }
 }
 
-void Battery::Save(const LearnedCurve::Minutes& minutes) {
+void Battery::Flush() {
   if (fs == nullptr) {
     return;
   }
-  const LearnedCurveFile file {learnedCurveVersion, observedTermination, minutes};
+  taskENTER_CRITICAL();
+  const LearnedCurveFile file {learnedCurveVersion, observedTermination, learnedCurve.Learned()};
+  dirty = false;
+  taskEXIT_CRITICAL();
   lfs_file_t handle;
   if (fs->FileOpen(&handle, learnedCurvePath, LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC) != LFS_ERR_OK) {
     return;
   }
   fs->FileWrite(&handle, reinterpret_cast<const uint8_t*>(&file), sizeof(file));
   fs->FileClose(&handle);
-  savedTermination = observedTermination;
+  savedTermination = file.observedTermination;
 }
 
 void Battery::MeasureVoltage() {

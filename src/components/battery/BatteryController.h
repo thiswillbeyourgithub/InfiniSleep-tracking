@@ -20,6 +20,14 @@ namespace Pinetime {
       /// Reads back the curve learned before the last reboot. After FS::Init.
       void Init(FS& fs);
 
+      /// Whether the learned curve or the termination changed since they were last written.
+      bool IsDirty() const {
+        return dirty;
+      }
+
+      /// Writes them to flash. Only while the flash is awake: see OnPowerChanged.
+      void Flush();
+
       uint8_t PercentRemaining() const {
         return percentRemaining;
       }
@@ -66,8 +74,9 @@ namespace Pinetime {
       /// The termination last written, so that unplugging writes only when a charge changed it.
       uint16_t savedTermination = BatteryCurve::noTerminationSeen;
 
+      bool dirty = false;
+
       void OnPowerChanged();
-      void Save(const LearnedCurve::Minutes& minutes);
 
       static Battery* instance;
       nrf_saadc_value_t saadc_value;
