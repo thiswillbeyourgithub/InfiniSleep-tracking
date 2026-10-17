@@ -57,6 +57,10 @@ namespace Pinetime {
       // 130 clears it. So does a 1 Hz arm swing nearly as strong as the pulse: walking at 120 bpm can
       // be read as 60, the price of not reading a resting 65 as 130.
       static constexpr float harmonicThreshold = 0.45f;
+      // Consecutive windows a peak an octave away from the current reading (twice or half of it)
+      // has to hold before it replaces the reading. A heart rate does not double in a few seconds,
+      // a harmonic or an arm swing winning a window or two does.
+      static constexpr uint8_t octaveJumpWindows = 8;
       // Maximum peak width (bins) at threshold for valid peak.
       static constexpr float maxPeakWidth = 2.5f;
       // Metric for spectrum noise level.
@@ -109,6 +113,8 @@ namespace Pinetime {
       float hrSpread = 0.0f;
       // Whether this acquisition has had its coarse estimate. One per acquisition, no more.
       bool earlyEstimateTaken = false;
+      // Windows in a row whose peak was an octave away from the reading
+      uint8_t octaveJumps = 0;
 
       int ProcessHeartRate(bool init);
       int EarlyHeartRate();

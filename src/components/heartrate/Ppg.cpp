@@ -219,6 +219,7 @@ void Ppg::Reset(bool resetDaqBuffer) {
   spectrum.fill(0.0f);
   uncertainty = 0;
   hrSpread = 0.0f;
+  octaveJumps = 0;
 }
 
 // Turns the oldest `length` samples of the acquisition buffer into a power spectrum, left in vReal.
@@ -320,8 +321,26 @@ int Ppg::ProcessHeartRate(bool init) {
   }
   // Set the ambient light threshold and return HR in BPM
   alsThreshold = static_cast<uint16_t>(alsValue * alsFactor);
+  // A window an octave away from the reading is held back until enough of them in a row say the
+  // reading is the one that is wrong. Averaged in straight away, a few of them would drag the
+  // reading to a value in between that is neither.
+  bool heldBack = false;
+  if (peakLocation > 0.0f && lastPeakLocation > 0.0f) {
+    const float ratio = peakLocation / lastPeakLocation;
+    if ((ratio > 1.7f && ratio < 2.3f) || (ratio > 1.0f / 2.3f && ratio < 1.0f / 1.7f)) {
+      octaveJumps++;
+      heldBack = octaveJumps < octaveJumpWindows;
+      if (!heldBack) {
+        // The reading was the wrong octave, so is everything averaged into it
+        dataAverage.fill(0.0f);
+        octaveJumps = 0;
+      }
+    } else {
+      octaveJumps = 0;
+    }
+  }
   // Get current average HR. If HR reduced to zero, return -1 (reset) else HR
-  peakLocation = HeartRateAverage(peakLocation);
+  peakLocation = heldBack ? lastPeakLocation : HeartRateAverage(peakLocation);
   int rtn = -1;
   if (peakLocation == 0.0f && lastPeakLocation > 0.0f) {
     lastPeakLocation = 0.0f;

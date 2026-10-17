@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <utility>
 #include <vector>
 #include "components/heartrate/Ppg.h"
 
@@ -88,13 +89,13 @@ namespace {
   };
 
   // A pulse the sensor could plausibly see: a fundamental at the heart rate, a second harmonic for
-  // the dicrotic notch, a slow baseline for breathing, white noise, all on the DC level the LED
-  // returns. Amplitudes are in ADC counts, the units Hrs3300::ReadHrsAls hands over.
+  // the dicrotic notch, a slow baseline for breathing, an arm swinging once a second as when walking
+  // (from `swingFrom` seconds on, for `swingFor` of them), white noise, all on the DC level the LED returns. Amplitudes are in ADC counts, the units Hrs3300::ReadHrsAls hands over.
   //
   // Fed the way HeartRateTask feeds the sensor: one sample every deltaTms, then whatever
   // HeartRate() has to say about it. The ambient light and reset handling is copied from
   // HeartRateTask::Work, so a reading here is a reading on the watch.
-  Run Measure(float bpm, float seconds, float amplitude = 200.0f, float noise = 10.0f, float drift = 0.0f, float harmonic = 0.25f) {
+  Run Measure(float bpm, float seconds, float amplitude = 200.0f, float noise = 10.0f, float drift = 0.0f, float harmonic = 0.25f, float swing = 0.0f, float swingFrom = 0.0f, float swingFor = 1e9f) {
     Ppg ppg;
     Run run;
     uint32_t seed = 12345;
@@ -102,7 +103,8 @@ namespace {
     for (int idx = 0; idx < samples; idx++) {
       const float t = static_cast<float>(idx) / sampleRate;
       float value = 20000.0f + amplitude * sinf(2.0f * pi * (bpm / 60.0f) * t) +
-                    harmonic * amplitude * sinf(4.0f * pi * (bpm / 60.0f) * t + 0.7f) + drift * sinf(2.0f * pi * 0.25f * t);
+                    harmonic * amplitude * sinf(4.0f * pi * (bpm / 60.0f) * t + 0.7f) + drift * sinf(2.0f * pi * 0.25f * t) +
+                    (t >= swingFrom && t < swingFrom + swingFor ? swing * sinf(2.0f * pi * 1.0f * t + 0.3f) : 0.0f);
       if (noise > 0.0f) {
         seed = seed * 1103515245u + 12345u;
         value += noise * ((static_cast<float>((seed >> 16) & 0x7fff) / 16383.5f) - 1.0f);
@@ -212,6 +214,22 @@ int main() {
            run.WorstError(bpm));
     CHECK(run.Any());
     CHECK(run.WorstError(bpm) <= 3);
+  }
+
+  // An arm swinging at 1 Hz puts a peak at 60 "bpm", right where half of a 120 bpm heart rate would
+  // be. When a few seconds of it win a few windows in the middle of a measurement, those windows must
+  // not be averaged in: they dragged the reading to a value in between that is neither.
+  printf("a few seconds of arm swing at half the heart rate\n");
+  for (const auto& [swing, seconds] : {std::pair {200.0f, 6.0f}, std::pair {300.0f, 4.0f}}) {
+    Run run = Measure(120.0f, 40.0f, 200.0f, 10.0f, 0.0f, 0.25f, swing, 20.0f, seconds);
+    printf("  swing %3.0f for %.0f s: %2zu readings, at 40 s = %3d bpm, worst error %2d\n",
+           swing,
+           seconds,
+           run.readings.size(),
+           run.Last(),
+           run.WorstError(120.0f));
+    CHECK(run.Any());
+    CHECK(run.WorstError(120.0f) <= 3);
   }
 
   // Nothing on the wrist means no reading, however loud the noise. A watch that invents a number
