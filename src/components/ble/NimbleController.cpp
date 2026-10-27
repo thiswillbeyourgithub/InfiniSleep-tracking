@@ -142,6 +142,18 @@ void NimbleController::Init() {
 
   RestoreBond();
 
+  // Every boot tells the bonded phone that the whole attribute table may have moved. Android
+  // keeps its map of a bonded device's services across connections and never looks again on its
+  // own, so after a firmware update that adds or moves a service, Gadgetbridge went on using the
+  // old map: characteristics it needed were missing, or sat at another handle, and it stayed on
+  // Connecting until re-pairing threw the map away.
+  // Every boot rather than only after an update, because nothing here knows which firmware wrote
+  // the bond, and one rediscovery after a reboot costs the phone a second or two.
+  // Nobody is connected yet, so NimBLE parks it in the restored subscription of the phone, and
+  // sends it once that phone reconnects and encrypts. A phone that never asked for Service
+  // Changed gets nothing, which is the case for a bond saved before the subscriptions were.
+  ble_svc_gatt_changed(0x0001, 0xFFFF);
+
   StartAdvertising();
 }
 
