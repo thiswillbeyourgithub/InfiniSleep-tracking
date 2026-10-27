@@ -69,7 +69,7 @@ The BMA accelerometer in the unit this was written on never answers on I2C. It r
 
 The motion code is written and shipped anyway, for watches whose sensor works, but it is **off by default** and has to be turned on from the Sensors page in the Sleep app. Until then, records report `0xFFFF`, meaning not measured. The firmware also refuses to wake the accelerometer overnight when no sensor answered at boot, so turning the setting on costs nothing on a watch like this one.
 
-The step count the watch faces showed was a permanent `0` for the same reason, so it is hidden when no accelerometer answered at boot, and the Steps page in the settings menu carries a `Steps: on / off` toggle for a wearer with a working sensor who would rather not see one. On a watch like this one that page reads `Steps: no sensor` and does not pretend to toggle anything.
+The step count the watch faces showed was a permanent `0` for the same reason, so it is hidden when no accelerometer answered at boot, and the Steps page in the settings menu carries a `Steps: on / off` toggle for a wearer with a working sensor who would rather not see one. On a watch like this one that page reads `Steps: no sensor`, without the goal or its buttons, and does not pretend to toggle anything. The Steps app is dropped from the launcher, and the Wake Sensitivity page reads `No sensor` instead of offering a calibration that would wait for a shake it cannot see.
 
 **Anyone reading this should treat the motion side as unverified on hardware.** Heart rate, the log, the BLE transfer and the settings do work.
 
@@ -219,7 +219,7 @@ Battery:
 Motion and steps:
 
 - Why the accelerometer failed to initialise, on the About screen.
-- Steps hidden when no sensor answered at boot, and a toggle for a wearer who has one and would rather not see them.
+- Steps hidden (watch faces and launcher) when no sensor answered at boot, and a toggle for a wearer who has one and would rather not see them.
 - `?` rather than a heart rate of `0` on the watch faces.
 
 Logging through the day:

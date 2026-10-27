@@ -615,10 +615,19 @@ void DisplayApp::LoadScreen(Apps app, DisplayApp::FullRefreshDirections directio
 
   switch (app) {
     case Apps::Launcher: {
+      // The steps app is dropped from the launcher, not merely greyed out, when no accelerometer
+      // answered at boot: it would only ever show zero. That is decided here rather than in its
+      // IsAvailable() because those only get the filesystem. The apps after it move up one tile,
+      // and the slot freed at the end stays empty, the way the last page is padded anyway.
       std::array<Screens::Tile::Applications, UserAppTypes::Count> apps;
-      std::ranges::transform(userApps, apps.begin(), [this](const auto& userApp) {
-        return Screens::Tile::Applications {userApp.icon, userApp.app, userApp.isAvailable(controllers.filesystem)};
-      });
+      apps.fill({"", Apps::None, false});
+      size_t shown = 0;
+      for (const auto& userApp : userApps) {
+        if (userApp.app == Apps::Steps && !motionController.HasSensor()) {
+          continue;
+        }
+        apps[shown++] = {userApp.icon, userApp.app, userApp.isAvailable(controllers.filesystem)};
+      }
       currentScreen = std::make_unique<Screens::ApplicationList>(this,
                                                                  settingsController,
                                                                  batteryController,
