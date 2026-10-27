@@ -12,7 +12,7 @@ namespace Pinetime {
 
       bool StepsShown(const Controllers::Settings& settingsController, const Controllers::MotionController& motionController) {
         return settingsController.GetStepsEnabled() &&
-               motionController.DeviceType() != Controllers::MotionController::DeviceTypes::Unknown;
+               motionController.HasSensor();
       }
 
       const char* HeartRateText(const Controllers::HeartRateController& heartRateController, char* buffer, size_t size) {

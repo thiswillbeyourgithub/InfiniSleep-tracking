@@ -40,24 +40,33 @@ SettingSteps::SettingSteps(Pinetime::Controllers::Settings& settingsController,
   lv_label_set_align(icon, LV_LABEL_ALIGN_CENTER);
   lv_obj_align(icon, title, LV_ALIGN_OUT_LEFT_MID, -10, 0);
 
-  stepValue = lv_label_create(lv_scr_act(), nullptr);
-  lv_obj_set_style_local_text_font(stepValue, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &jetbrains_mono_42);
-  lv_label_set_text_fmt(stepValue, "%lu", settingsController.GetStepsGoal());
-  lv_label_set_align(stepValue, LV_LABEL_ALIGN_CENTER);
-  lv_obj_align(stepValue, lv_scr_act(), LV_ALIGN_CENTER, 0, -20);
-
   btnTracking = lv_btn_create(lv_scr_act(), nullptr);
   btnTracking->user_data = this;
   lv_obj_set_size(btnTracking, LV_HOR_RES - 20, 36);
-  lv_obj_align(btnTracking, lv_scr_act(), LV_ALIGN_CENTER, 0, 38);
   lv_obj_set_style_local_bg_color(btnTracking, LV_BTN_PART_MAIN, LV_STATE_DEFAULT, Colors::bgAlt);
   lv_obj_set_event_cb(btnTracking, event_handler);
   lblTracking = lv_label_create(btnTracking, nullptr);
   UpdateTrackingLabel();
-  if (motionController.DeviceType() == Controllers::MotionController::DeviceTypes::Unknown) {
+
+  if (!motionController.HasSensor()) {
+    // Without an accelerometer there are no steps to count towards a goal, so the goal and its
+    // buttons are left out rather than offered for nothing, and the line saying why takes the
+    // middle of the screen on its own.
+    lv_obj_align(btnTracking, lv_scr_act(), LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_state(btnTracking, LV_STATE_DISABLED);
     lv_obj_set_state(lblTracking, LV_STATE_DISABLED);
+    return;
   }
+
+  // Just under the title, so it stays clear of the + and - buttons, which take the bottom 80 px
+  // of the screen. Lower down it used to sit behind them.
+  lv_obj_align(btnTracking, title, LV_ALIGN_OUT_BOTTOM_MID, -15, 10);
+
+  stepValue = lv_label_create(lv_scr_act(), nullptr);
+  lv_obj_set_style_local_text_font(stepValue, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, &jetbrains_mono_42);
+  lv_label_set_text_fmt(stepValue, "%lu", settingsController.GetStepsGoal());
+  lv_label_set_align(stepValue, LV_LABEL_ALIGN_CENTER);
+  lv_obj_align(stepValue, lv_scr_act(), LV_ALIGN_CENTER, 0, 0);
 
   static constexpr uint8_t btnWidth = 115;
   static constexpr uint8_t btnHeight = 80;
@@ -89,7 +98,7 @@ SettingSteps::~SettingSteps() {
 }
 
 void SettingSteps::UpdateTrackingLabel() {
-  if (motionController.DeviceType() == Controllers::MotionController::DeviceTypes::Unknown) {
+  if (!motionController.HasSensor()) {
     // Nothing here to turn on or off: no accelerometer answered at boot, so the watch faces show no
     // steps whatever this page says, and saying so beats a switch that changes nothing.
     lv_label_set_text_static(lblTracking, "Steps: no sensor");
@@ -102,7 +111,7 @@ void SettingSteps::UpdateTrackingLabel() {
 
 void SettingSteps::UpdateSelected(lv_obj_t* object, lv_event_t event) {
   if (object == btnTracking) {
-    if (event == LV_EVENT_CLICKED && motionController.DeviceType() != Controllers::MotionController::DeviceTypes::Unknown) {
+    if (event == LV_EVENT_CLICKED && motionController.HasSensor()) {
       settingsController.SetStepsEnabled(!settingsController.GetStepsEnabled());
       UpdateTrackingLabel();
     }

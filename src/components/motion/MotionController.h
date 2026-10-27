@@ -69,6 +69,13 @@ namespace Pinetime {
         return deviceType;
       }
 
+      /// False when no accelerometer answered at boot. Everything built on it (steps, raise and
+      /// shake to wake) then reads zeros, so the screens use this to say so instead of offering
+      /// controls that change nothing.
+      bool HasSensor() const {
+        return deviceType != DeviceTypes::Unknown;
+      }
+
       /// Why the sensor did or did not start. Mostly of interest when DeviceType() is Unknown,
       /// in which case the whole controller reports zeros forever.
       const Pinetime::Drivers::Bma421::Diagnostics& GetDiagnostics() const {

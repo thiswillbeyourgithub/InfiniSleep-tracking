@@ -598,7 +598,7 @@ bool SystemTask::MotionWantedBySleepTracker() const {
   // which is the case on the watch this was written on, would be woken to read it all night
   // and record nothing but "not measured" for the trouble.
   return infiniSleepController.IsTrackerEnabled() && infiniSleepController.GetInfiniSleepSettings().bodyTracking &&
-         motionController.DeviceType() != Controllers::MotionController::DeviceTypes::Unknown;
+         motionController.HasSensor();
 }
 
 bool SystemTask::MotionNeededAtFullRate() const {

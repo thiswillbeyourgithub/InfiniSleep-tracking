@@ -41,7 +41,7 @@ namespace {
     const char* name = ToString(motionController.DeviceType());
     const auto& diagnostics = motionController.GetDiagnostics();
 
-    if (motionController.DeviceType() == Pinetime::Controllers::MotionController::DeviceTypes::Unknown) {
+    if (!motionController.HasSensor()) {
       // Trailing pair is which addresses acknowledged on the bus, primary then alternate.
       snprintf(buffer,
                size,

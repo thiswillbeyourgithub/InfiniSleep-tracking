@@ -26,9 +26,10 @@ namespace Pinetime {
         Controllers::Settings& settingsController;
         Controllers::MotionController& motionController;
 
-        lv_obj_t* stepValue;
-        lv_obj_t* btnPlus;
-        lv_obj_t* btnMinus;
+        // Left null when there is no sensor, the page then showing only the line that says so.
+        lv_obj_t* stepValue = nullptr;
+        lv_obj_t* btnPlus = nullptr;
+        lv_obj_t* btnMinus = nullptr;
         lv_obj_t* btnTracking;
         lv_obj_t* lblTracking;
       };
