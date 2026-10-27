@@ -24,6 +24,17 @@ SettingShakeThreshold::SettingShakeThreshold(Controllers::Settings& settingsCont
   lv_label_set_align(title, LV_LABEL_ALIGN_CENTER);
   lv_obj_align(title, lv_scr_act(), LV_ALIGN_IN_TOP_MID, 0, 0);
 
+  if (!motionController.HasSensor()) {
+    // Without an accelerometer there is no shake to measure, so the arc would sit at zero and the
+    // calibration would wait for a movement that never comes. A line saying why replaces both.
+    // Nothing else is created, which the destructor relies on.
+    lv_obj_t* noSensor = lv_label_create(lv_scr_act(), nullptr);
+    lv_obj_set_style_local_text_color(noSensor, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, LV_COLOR_GRAY);
+    lv_label_set_text_static(noSensor, "No sensor");
+    lv_obj_align(noSensor, lv_scr_act(), LV_ALIGN_CENTER, 0, 0);
+    return;
+  }
+
   positionArc = lv_arc_create(lv_scr_act(), nullptr);
   positionArc->user_data = this;
 
@@ -72,6 +83,12 @@ SettingShakeThreshold::SettingShakeThreshold(Controllers::Settings& settingsCont
 }
 
 SettingShakeThreshold::~SettingShakeThreshold() {
+  if (!motionController.HasSensor()) {
+    // Only the labels were created, and the threshold was never shown, so there is nothing to save.
+    lv_obj_clean(lv_scr_act());
+    return;
+  }
+
   settingsController.SetShakeThreshold(lv_arc_get_value(positionArc));
 
   if (EnableForCal) {
