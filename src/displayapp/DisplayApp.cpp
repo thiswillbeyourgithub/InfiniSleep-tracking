@@ -544,8 +544,12 @@ void DisplayApp::Refresh() {
         LoadNewScreen(Apps::SysInfo, DisplayApp::FullRefreshDirections::Up);
         break;
       case Messages::ButtonDoubleClicked:
-        if (!infiniSleepController.IsAlerting() && currentApp != Apps::Notifications && currentApp != Apps::NotificationsPreview) {
-          LoadNewScreen(Apps::Notifications, DisplayApp::FullRefreshDirections::Down);
+        // Upstream opens the notifications here. The light gets it instead because it is the one
+        // thing wanted in the dark without looking at the screen, and the button is the one control
+        // that can be found by feel. The notifications keep their swipe down off the watch face.
+        // Not while the wake alarm rings, so a fumbled press does not bury the alarm screen.
+        if (!infiniSleepController.IsAlerting() && currentApp != Apps::FlashLight) {
+          LoadNewScreen(Apps::FlashLight, DisplayApp::FullRefreshDirections::Down);
         }
         break;
 
