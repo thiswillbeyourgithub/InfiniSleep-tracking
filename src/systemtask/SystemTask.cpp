@@ -6,6 +6,7 @@
 #include "BootloaderVersion.h"
 #include "components/battery/BatteryController.h"
 #include "components/ble/BleController.h"
+#include "components/settings/Chimes.h"
 #include "displayapp/TouchEvents.h"
 #include "drivers/Cst816s.h"
 #include "drivers/St7789.h"
@@ -405,22 +406,23 @@ void SystemTask::Work() {
           // Remember we'll have to reset the counter next time we're awake
           stepCounterMustBeReset = true;
           break;
-        case Messages::OnNewHour:
-          using Pinetime::Controllers::AlarmController;
-          if (settingsController.GetNotificationStatus() != Controllers::Settings::Notification::Sleep &&
-              settingsController.GetChimeOption() == Controllers::Settings::ChimesOption::Hours && !alarmController.IsAlerting()) {
+        case Messages::OnNewQuarterHour: {
+          using Settings = Controllers::Settings;
+          const Controllers::Chimes::State chimeState {
+            .intervalMinutes = settingsController.GetChimesInterval(),
+            .startHour = settingsController.GetChimesStartHour(),
+            .endHour = settingsController.GetChimesEndHour(),
+            .ignoreDoNotDisturb = settingsController.GetChimesIgnoreDnd(),
+            .notificationsOff = settingsController.GetNotificationStatus() == Settings::Notification::Off,
+            .sleepMode = settingsController.GetNotificationStatus() == Settings::Notification::Sleep,
+            .sleepTracking = infiniSleepController.IsTrackerEnabled(),
+            .alarmRinging = alarmController.IsAlerting() || infiniSleepController.IsAlerting(),
+          };
+          if (Controllers::Chimes::ShouldChime(chimeState, dateTimeController.Hours(), dateTimeController.Minutes())) {
             GoToRunning();
             displayApp.PushMessage(Pinetime::Applications::Display::Messages::Chime);
           }
-          break;
-        case Messages::OnNewHalfHour:
-          using Pinetime::Controllers::AlarmController;
-          if (settingsController.GetNotificationStatus() != Controllers::Settings::Notification::Sleep &&
-              settingsController.GetChimeOption() == Controllers::Settings::ChimesOption::HalfHours && !alarmController.IsAlerting()) {
-            GoToRunning();
-            displayApp.PushMessage(Pinetime::Applications::Display::Messages::Chime);
-          }
-          break;
+        } break;
         case Messages::OnChargingEvent: {
           const bool wasPowerPresent = batteryController.IsPowerPresent();
           batteryController.ReadPowerState();

@@ -12,7 +12,6 @@ namespace Pinetime {
       enum class ClockType : uint8_t { H24, H12 };
       enum class WeatherFormat : uint8_t { Metric, Imperial };
       enum class Notification : uint8_t { On, Off, Sleep };
-      enum class ChimesOption : uint8_t { None, Hours, HalfHours };
       enum class WakeUpMode : uint8_t { SingleTap = 0, DoubleTap = 1, RaiseWrist = 2, Shake = 3, LowerWrist = 4 };
       enum class Colors : uint8_t {
         White,
@@ -72,15 +71,49 @@ namespace Pinetime {
         return settings.watchFace;
       };
 
-      void SetChimeOption(ChimesOption chimeOption) {
-        if (chimeOption != settings.chimesOption) {
+      /// Minutes between chimes, 0 for off. See Chimes.h for what silences one.
+      void SetChimesInterval(uint8_t minutes) {
+        if (minutes != settings.chimesInterval) {
           settingsChanged = true;
         }
-        settings.chimesOption = chimeOption;
+        settings.chimesInterval = minutes;
       };
 
-      ChimesOption GetChimeOption() const {
-        return settings.chimesOption;
+      uint8_t GetChimesInterval() const {
+        return settings.chimesInterval;
+      };
+
+      void SetChimesStartHour(uint8_t hour) {
+        if (hour != settings.chimesStartHour) {
+          settingsChanged = true;
+        }
+        settings.chimesStartHour = hour;
+      };
+
+      uint8_t GetChimesStartHour() const {
+        return settings.chimesStartHour;
+      };
+
+      void SetChimesEndHour(uint8_t hour) {
+        if (hour != settings.chimesEndHour) {
+          settingsChanged = true;
+        }
+        settings.chimesEndHour = hour;
+      };
+
+      uint8_t GetChimesEndHour() const {
+        return settings.chimesEndHour;
+      };
+
+      void SetChimesIgnoreDnd(bool ignore) {
+        if (ignore != settings.chimesIgnoreDnd) {
+          settingsChanged = true;
+        }
+        settings.chimesIgnoreDnd = ignore;
+      };
+
+      bool GetChimesIgnoreDnd() const {
+        return settings.chimesIgnoreDnd;
       };
 
       void SetPTSColorTime(Colors colorTime) {
@@ -342,14 +375,15 @@ namespace Pinetime {
     private:
       Pinetime::Controllers::FS& fs;
 
-      // Bumped from 0x000a for stepsEnabled. The file is discarded when the version does not
+      // Bumped from 0x000b for the chime interval, hours and override, and before that from 0x000a
+      // for stepsEnabled. The file is discarded when the version does not
       // match, so every watch setting goes back to its default once after an update.
       //
       // Appending a field without bumping, the way InfiniSleepSettings does it, is not safe here.
       // One more byte lands inside the padding the struct already has, and the firmware that wrote
       // the file put indeterminate bytes there, so a new flag would read back as whatever happened
       // to be in RAM. One reset is better than a setting that turns itself off.
-      static constexpr uint32_t settingsVersion = 0x000b;
+      static constexpr uint32_t settingsVersion = 0x000c;
 
       struct SettingsData {
         uint32_t version = settingsVersion;
@@ -364,7 +398,12 @@ namespace Pinetime {
         Notification notificationStatus = Notification::On;
 
         Pinetime::Applications::WatchFace watchFace = Pinetime::Applications::WatchFace::Digital;
-        ChimesOption chimesOption = ChimesOption::None;
+        /// Minutes between chimes, 0 for off. Stored as minutes rather than an enum, the way
+        /// heartRatePollInterval is, so the settings page and Chimes.h read it the same way.
+        uint8_t chimesInterval = 0;
+        uint8_t chimesStartHour = 10;
+        uint8_t chimesEndHour = 21;
+        bool chimesIgnoreDnd = false;
 
         PineTimeStyle PTS;
 

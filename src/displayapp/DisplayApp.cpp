@@ -720,7 +720,7 @@ void DisplayApp::LoadScreen(Apps app, DisplayApp::FullRefreshDirections directio
       currentScreen = std::make_unique<Screens::SettingSetDateTime>(this, dateTimeController, settingsController);
       break;
     case Apps::SettingChimes:
-      currentScreen = std::make_unique<Screens::SettingChimes>(settingsController);
+      currentScreen = std::make_unique<Screens::SettingChimes>(this, settingsController);
       break;
     case Apps::SettingHeartRate:
       currentScreen = std::make_unique<Screens::SettingHeartRate>(this, settingsController);

@@ -14,6 +14,7 @@ The work lives on the `infinisleep-health` branch. A [Logging app](#logging-what
 - [Pomodoro app](#pomodoro-app)
 - [Timer and stopwatch](#timer-and-stopwatch)
 - [Flashlight](#flashlight)
+- [Chimes](#chimes)
 - [Logging what happens through the day](#logging-what-happens-through-the-day)
 - [Apps left out](#apps-left-out)
 - [Building](#building)
@@ -167,6 +168,7 @@ tests/stopwatch/run.sh         # the stopwatch, including the thousand hours it 
 tests/timer/run.sh             # the countdown timer: a pause keeps the time left, a reset the length set
 tests/battery/run.sh           # the battery curve, against a reference discharge, and its calibration
 tests/infinisleep/run.sh       # the snooze: the time set by hand outlives the snooze before it
+tests/chimes/run.sh            # the chimes: each interval, the hours, and what silences them
 ```
 
 ## Flashlight
@@ -178,6 +180,16 @@ A double press on the button opens it too, from any screen, since the button is 
 The app opens on six choices rather than on a torch to switch on and then adjust: three strengths in white on the top row and the same three in red below, weakest on the left. Tapping one lights the whole screen in it at once, so the light that comes on is the one wanted, and red at the lowest strength, for the middle of the night, is never reached through a flash of white. Red because it is the colour that leaves night vision, and whoever is asleep beside the wearer, alone. The choices themselves are shown at the lowest strength for the same reason. Tapping the lit screen puts the choices back, swiping left or right while lit steps the strength, and the button leaves.
 
 Written with Claude Code.
+
+## Chimes
+
+The chime buzzes every hour, 30 minutes or 15 minutes, set from the first page of Settings, Chimes. Upstream offers the hour and the half hour only, at any time of day.
+
+The second page sets the hours it may chime between, 10 to 21 by default, both full hours included: 10:00 chimes, 21:00 chimes, 21:30 does not. A start later than the end spans midnight. The same page has an Ignore DND box, off by default, which lets the chime through when notifications are turned off.
+
+Some things silence it whatever is set, override included: a night tracked by the Sleep app, sleep mode, and a ringing alarm. The decision lives in `src/components/settings/Chimes.h`, apart from the task that rings it, so `tests/chimes/run.sh` can step it through a whole day on the host.
+
+Upgrading to the build that brought this resets every watch setting once, since the settings file changed layout and a file of the old layout is discarded rather than misread.
 
 ## Everything this fork changes
 
@@ -236,6 +248,7 @@ Other apps:
 - The Timer rings until told to stop instead of buzzing once, and opens on the length last used.
 - The Stopwatch keeps a run going after the app is left.
 - The flashlight on the sideways swipe from the watch face that upstream leaves unused, opening on three strengths in white and three in red, and on a double press of the button.
+- Chimes every 15, 30 or 60 minutes, only between two hours of the day, never through a tracked night, with an override for notifications turned off.
 - The sleep app sits before steps in the app list, and four games and the Metronome are dropped for flash.
 
 Tests:

@@ -110,22 +110,16 @@ void DateTime::UpdateTime(uint32_t systickCounter, bool forceUpdate) {
   auto minute = Minutes();
   auto hour = Hours();
 
-  if (minute == 0 && !isHourAlreadyNotified) {
-    isHourAlreadyNotified = true;
+  // The chimes are asked about every quarter of an hour, their finest interval, and decide there
+  // whether this one rings (see Chimes.h). One message rather than one per interval, so a new
+  // interval needs no new message.
+  if (minute % 15 == 0 && !isQuarterHourAlreadyNotified) {
+    isQuarterHourAlreadyNotified = true;
     if (systemTask != nullptr) {
-      systemTask->PushMessage(System::Messages::OnNewHour);
+      systemTask->PushMessage(System::Messages::OnNewQuarterHour);
     }
-  } else if (minute != 0) {
-    isHourAlreadyNotified = false;
-  }
-
-  if ((minute == 0 || minute == 30) && !isHalfHourAlreadyNotified) {
-    isHalfHourAlreadyNotified = true;
-    if (systemTask != nullptr) {
-      systemTask->PushMessage(System::Messages::OnNewHalfHour);
-    }
-  } else if (minute != 0 && minute != 30) {
-    isHalfHourAlreadyNotified = false;
+  } else if (minute % 15 != 0) {
+    isQuarterHourAlreadyNotified = false;
   }
 
   // Notify new day to SystemTask
