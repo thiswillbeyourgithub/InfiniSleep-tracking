@@ -459,11 +459,18 @@ void NimbleController::PersistBond(struct ble_gap_conn_desc& desc) {
   if (rc == 0) {
     memset(&key, 0, sizeof key);
     key.cccd.peer_addr = desc.peer_id_addr;
+    // idx is the position among this peer's entries only, so reading stops at the first miss
+    // rather than at the store's total count. That total counts every peer, and upstream also
+    // asked for index peer_count on every pass instead of i, which never matched: every
+    // subscription was saved as zeroes, so after a reboot the watch no longer knew the phone
+    // had asked for Service Changed, and could never tell it that its services had moved.
     int peer_count = 0;
-    ble_store_util_count(BLE_STORE_OBJ_TYPE_CCCD, &peer_count);
-    for (int i = 0; i < peer_count; i++) {
+    while (peer_count < MYNEWT_VAL(BLE_STORE_MAX_CCCDS)) {
       key.cccd.idx = peer_count;
-      ble_store_read_cccd(&key.cccd, &peer_cccd_set[i].cccd);
+      if (ble_store_read_cccd(&key.cccd, &peer_cccd_set[peer_count].cccd) != 0) {
+        break;
+      }
+      peer_count++;
     }
 
     /* Wakeup Spi and SpiNorFlash before accessing the file system
@@ -481,7 +488,9 @@ void NimbleController::PersistBond(struct ble_gap_conn_desc& desc) {
 
     lfs_file_t file_p;
 
-    rc = fs.FileOpen(&file_p, "/bond.dat", LFS_O_WRONLY | LFS_O_CREAT);
+    // Truncated because the file now outlives a boot (see RestoreBond), so a shorter
+    // subscription list must not leave the end of a longer one behind it.
+    rc = fs.FileOpen(&file_p, "/bond.dat", LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC);
     if (rc == 0) {
       fs.FileWrite(&file_p, reinterpret_cast<uint8_t*>(&our_sec.sec), sizeof our_sec);
       fs.FileWrite(&file_p, reinterpret_cast<uint8_t*>(&peer_sec.sec), sizeof peer_sec);
@@ -516,6 +525,11 @@ void NimbleController::RestoreBond() {
     }
 
     fs.FileClose(&file_p);
-    fs.FileDelete("/bond.dat");
+    // Kept rather than deleted, as upstream did. Deleted, the bond lived only in RAM until the
+    // phone next connected and PersistBond wrote it back, so a second reboot before then (a
+    // firmware update, a flat battery, a crash) forgot the phone. The phone still offered its
+    // keys, the watch no longer knew them, encryption failed, and Gadgetbridge sat on
+    // Connecting until the watch was paired again.
+    // PersistBond still rewrites the file once per boot, since bondId starts zeroed.
   }
 }
