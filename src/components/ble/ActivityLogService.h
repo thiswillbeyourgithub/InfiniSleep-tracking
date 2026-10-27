@@ -34,6 +34,11 @@ namespace Pinetime {
     ///   0x81 <uint8 protocolVersion> <uint8 recordSize> <uint16 recordCount>
     ///        <uint32 oldestTimestamp> <uint32 newestTimestamp>
     ///   0x82 <uint8 recordsInBatch>  batch finished, 0 means nothing left to send
+    ///   0x83                    unasked: a sleep session just ended, now is a good time to
+    ///                           collect. Its own opcode rather than an unasked 0x81, because a
+    ///                           0x81 already follows every Release, and a host that took that
+    ///                           one as a cue would collect in a loop. A host that does not know
+    ///                           it ignores it and collects on its own schedule.
     ///   0x8F <uint8 errorCode>       1 unknown command, 2 malformed command,
     ///                                3 data characteristic not subscribed
     ///
@@ -53,6 +58,10 @@ namespace Pinetime {
 
       void SubscribeNotification(uint16_t attributeHandle);
       void UnsubscribeNotification(uint16_t attributeHandle);
+
+      /// Sends the unasked 0x83 on the current connection, if there is one. Nothing is queued
+      /// for later: a phone that is not connected collects on reconnecting anyway.
+      void AnnounceRecordsWaiting();
 
       static constexpr uint8_t protocolVersion = 1;
 

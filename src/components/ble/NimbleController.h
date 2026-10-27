@@ -76,6 +76,10 @@ namespace Pinetime {
         return weatherService;
       };
 
+      Pinetime::Controllers::ActivityLogService& activityLog() {
+        return activityLogService;
+      };
+
       uint16_t connHandle();
       void NotifyBatteryLevel(uint8_t level, uint16_t voltage);
 

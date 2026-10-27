@@ -35,6 +35,7 @@ namespace {
   // Responses notified by the watch on the control point.
   constexpr uint8_t responseStatus = 0x81;
   constexpr uint8_t responseBatchComplete = 0x82;
+  constexpr uint8_t announceRecordsWaiting = 0x83;
   constexpr uint8_t responseError = 0x8F;
 
   constexpr uint8_t errorUnknownCommand = 0x01;
@@ -199,6 +200,13 @@ void ActivityLogService::NotifyStatus(uint16_t connectionHandle) {
   WriteUint32(&response[5], provider.OldestTimestamp());
   WriteUint32(&response[9], provider.NewestTimestamp());
   NotifyControl(connectionHandle, response, sizeof(response));
+}
+
+void ActivityLogService::AnnounceRecordsWaiting() {
+  // Called from the system task rather than the host task. Notifying from there is what the
+  // heart rate service already does, NimBLE takes its own lock for it.
+  const uint8_t announcement[1] = {announceRecordsWaiting};
+  NotifyControl(nimble.connHandle(), announcement, sizeof(announcement));
 }
 
 void ActivityLogService::NotifyError(uint16_t connectionHandle, uint8_t errorCode) {

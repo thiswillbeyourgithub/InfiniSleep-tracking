@@ -497,6 +497,10 @@ void SystemTask::Work() {
               activityLogController.DropSince(activitySessionStart);
             } else {
               RecordSessionBoundary();
+              // A night just ended, so the wearer is up and the phone is usually picked up
+              // within minutes. Asking now has the night collected by then, instead of
+              // whenever the phone's own timer next comes round.
+              nimbleController.activityLog().AnnounceRecordsWaiting();
             }
             activitySessionStart = 0;
           }
